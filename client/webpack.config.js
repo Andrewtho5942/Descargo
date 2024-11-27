@@ -4,14 +4,11 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 module.exports = {
   entry: './src/index.js',
   output: {
-    path: path.resolve(__dirname, 'build'),
+    path: path.resolve(__dirname, 'bundle'),
     filename: 'bundle.js',
   },
   resolve: {
-    extensions: ['.js'],
-    alias: {
-      react: require.resolve('react'),
-    },
+    extensions: ['.js']
   },
   module: {
     rules: [

@@ -3,10 +3,21 @@
   "name": "YouTube Downloader",
   "version": "1.0",
   "description": "Download YouTube videos using yt-dl",
-  "permissions": ["activeTab", "scripting", "storage"],
-  "host_permissions": ["http://localhost:5000/*"],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://localhost:5000/*"
+  ],
   "action": {
-    "default_popup": "popup.html",
-    "default_icon": "build/favicon.ico"
+    "default_popup": "bundle/index.html",
+    "default_icon": "favicon.ico"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "andrewtho5942_yt_dl@gmail.com"
+    }
   }
 }
