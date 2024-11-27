@@ -12,14 +12,14 @@ app.use(bodyParser.json());
 
 // endpoint to handle download requests
 app.post('/download', (req, res) => {
-  const { url } = req.body;
+  const { url, format } = req.body;
 
   if (!url) {
     return res.status(400).send({ error: 'YouTube URL is required.' });
   }
 
   // execute yt-dl command to download the youtube video
-  exec(`yt-dlp "${url}"`, (error, stdout, stderr) => {
+  exec(`yt-dlp "${url}" -f "${format}"`, (error, stdout, stderr) => {
     if (error) {
       console.error(`Error: ${stderr}`);
       return res.status(500).send({ error: 'failure' });

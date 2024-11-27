@@ -10,6 +10,7 @@ import checkmark from './images/check.png';
 function App() {
   const [link, setLink] = useState('');
   const [result, setResult] = useState('');
+  const [videoFormat, setVideoFormat] = useState(false);
 
   const updateLink = (e) => {
     let newText = e.target.value;
@@ -26,7 +27,8 @@ function App() {
 
     try {
       const response = await axios.post('http://localhost:5000/download', {
-        url: link, // Send the URL to the backend
+        url: link,
+        format: videoFormat ? 'mp4' : 'm4a'
       });
       setResult(response.data.message);
     } catch (error) {
@@ -36,6 +38,10 @@ function App() {
 
     setLink('');
   };
+
+  const toggleVideoFormat = () => {
+    setVideoFormat(!videoFormat);
+  }
 
   return (
     <div className="App" >
@@ -49,7 +55,14 @@ function App() {
         value={link}
         onChange={updateLink}
         placeholder="Enter YouTube URL"
+        className="link-input"
       />
+
+      <div className='format'>
+        MP4?
+        <input type="checkbox" checked={videoFormat} onChange={toggleVideoFormat} className="format-toggle"/>
+      </div>
+
       <button onClick={submitLink}>Download</button>
       {result && <img src={
         result === 'loading' ? loadingGif :

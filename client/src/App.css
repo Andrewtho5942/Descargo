@@ -34,11 +34,11 @@ h1 {
   height: 30px;
   position: absolute;
   left: 55px;
-  top: 15px;
+  top: 20px;
 }
 
 
-input {
+.link-input {
   width: 95%;
   padding: 5px;
   font-size: 16px;
@@ -91,4 +91,24 @@ button:hover {
   height: 32px;
   left: 238px;
   top: 120px;
+}
+
+.format {
+ position:absolute;
+ left:50px;
+ top:120px;
+  padding:2px 5px ;
+ color:white;
+ background-color: rgb(43, 47, 49);
+ border-radius: 5px;
+ font-size: large;
+}
+
+.format-toggle {
+  width:16px;
+  height:16px;
+}
+
+.format-toggle:hover {
+  cursor:pointer;
 }
