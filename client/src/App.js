@@ -11,6 +11,7 @@ function App() {
   const [link, setLink] = useState('');
   const [result, setResult] = useState('');
   const [videoFormat, setVideoFormat] = useState(false);
+  const [gdrive, setGdrive] = useState(true);
 
 
   useEffect(() => {
@@ -22,7 +23,7 @@ function App() {
   })
 
   const handleKeyPress = (e) => {
-    switch(e.key) {
+    switch (e.key) {
       case 'Enter':
         submitLink();
         break;
@@ -46,7 +47,8 @@ function App() {
     try {
       const response = await axios.post('http://localhost:5000/download', {
         url: link,
-        format: videoFormat ? 'mp4' : 'm4a'
+        format: videoFormat ? 'mp4' : 'm4a',
+        gdrive: gdrive
       });
       setResult(response.data.message);
     } catch (error) {
@@ -61,6 +63,9 @@ function App() {
     setVideoFormat(!videoFormat);
   }
 
+  const toggleGdrive = () => {
+    setGdrive(!gdrive);
+  }
   return (
     <div className="App" >
       <img src={download} alt="youtube" className="dl-img"></img>
@@ -78,14 +83,21 @@ function App() {
 
       <div className='format'>
         MP4?
-        <input type="checkbox" checked={videoFormat} onChange={toggleVideoFormat} className="format-toggle"/>
+        <input type="checkbox" checked={videoFormat} onChange={toggleVideoFormat} className="toggle" />
       </div>
 
       <button onClick={submitLink}>Download</button>
       {result && <img src={
         result === 'loading' ? loadingGif :
-        result === 'success' ? checkmark : xmark
+          result === 'success' ? checkmark : xmark
       } alt="loading" className={`result ${result}`} />}
+
+
+      <div className='gdrive'>
+        Gdrive?
+        <input type="checkbox" checked={gdrive} onChange={toggleGdrive} className="toggle" />
+      </div>
+
       <div style={{ height: '10px' }}></div>
     </div>
   );

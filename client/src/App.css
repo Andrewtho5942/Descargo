@@ -67,6 +67,7 @@ button {
   border: none;
   border-radius: 4px;
   margin-top: 5px;
+  margin-right:60px;
   transition: background-color 0.2s ease;
 }
 
@@ -82,20 +83,20 @@ button:hover {
 .loading {
   width: 48px;
   height: 48px;
-  left: 230px;
+  left:197px;
   top: 112px;
 }
 
 .success, .failure {
-  width: 32px;
-  height: 32px;
-  left: 238px;
-  top: 120px;
+  width: 24px;
+  height: 24px;
+  left: 209px;
+  top: 124px;
 }
 
 .format {
  position:absolute;
- left:50px;
+ left:15px;
  top:120px;
   padding:2px 5px ;
  color:white;
@@ -104,11 +105,22 @@ button:hover {
  font-size: large;
 }
 
-.format-toggle {
+.gdrive {
+  position:absolute;
+  left:255px;
+  top:120px;
+  padding:2px 5px ;
+  color:white;
+  background-color: rgb(43, 47, 49);
+  border-radius: 5px;
+  font-size: large;
+ }
+
+.toggle {
   width:16px;
   height:16px;
 }
 
-.format-toggle:hover {
+.toggle:hover {
   cursor:pointer;
 }
