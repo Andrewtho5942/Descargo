@@ -1,5 +1,5 @@
 import './App.css';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 import download from './images/dl.png';
@@ -11,6 +11,24 @@ function App() {
   const [link, setLink] = useState('');
   const [result, setResult] = useState('');
   const [videoFormat, setVideoFormat] = useState(false);
+
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyPress);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyPress);
+    };
+  })
+
+  const handleKeyPress = (e) => {
+    switch(e.key) {
+      case 'Enter':
+        submitLink();
+        break;
+      default:
+    }
+  }
 
   const updateLink = (e) => {
     let newText = e.target.value;
