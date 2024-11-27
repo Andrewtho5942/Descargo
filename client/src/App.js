@@ -1,9 +1,15 @@
 import './App.css';
 import React, { useState } from 'react';
-import download from '../public/dl.png';
+import axios from 'axios';
+
+import download from './images/dl.png';
+import loadingGif from './images/loading.gif';
+import xmark from './images/x.png';
+import checkmark from './images/check.png';
 
 function App() {
   const [link, setLink] = useState('');
+  const [result, setResult] = useState('');
 
   const updateLink = (e) => {
     let newText = e.target.value;
@@ -12,30 +18,31 @@ function App() {
   };
 
   const submitLink = async () => {
+    setResult('loading');
     if (!link) {
-      alert('Please enter a YouTube URL.');
+      setResult('failure');
       return;
     }
-  
+
     try {
       const response = await axios.post('http://localhost:5000/download', {
         url: link, // Send the URL to the backend
       });
-      alert(response.data.message);
+      setResult(response.data.message);
     } catch (error) {
       console.error('Error:', error);
-      alert('Failed to download video. Please try again.');
+      setResult('failure');
     }
-    
+
     setLink('');
   };
 
   return (
     <div className="App" >
-      <div className="header-container">
-        <img src={download} alt="YT image" className="dl-img"></img>
+      <img src={download} alt="youtube" className="dl-img"></img>
+      <span className="header">
         <h1>YT Downloader</h1>
-      </div>
+      </span>
 
       <input
         type="text"
@@ -44,6 +51,11 @@ function App() {
         placeholder="Enter YouTube URL"
       />
       <button onClick={submitLink}>Download</button>
+      {result && <img src={
+        result === 'loading' ? loadingGif :
+        result === 'success' ? checkmark : xmark
+      } alt="loading" className={`result ${result}`} />}
+      <div style={{ height: '10px' }}></div>
     </div>
   );
 }

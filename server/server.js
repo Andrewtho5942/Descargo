@@ -1,7 +1,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-const { exec } = require('child_process');
+const { exec } = require('child_process'); 
 
 const app = express();
 const PORT = 5000;
@@ -15,18 +15,18 @@ app.post('/download', (req, res) => {
   const { url } = req.body;
 
   if (!url) {
-    return res.status(400).send({ error: 'YouTube URL is required' });
+    return res.status(400).send({ error: 'YouTube URL is required.' });
   }
 
   // execute yt-dl command to download the youtube video
   exec(`yt-dlp "${url}"`, (error, stdout, stderr) => {
     if (error) {
       console.error(`Error: ${stderr}`);
-      return res.status(500).send({ error: 'Failed to download video' });
+      return res.status(500).send({ error: 'failure' });
     }
 
     console.log(`Output: ${stdout}`);
-    res.send({ message: 'Download started successfully', output: stdout });
+    res.send({ message: 'success', output: stdout });
   });
 });
 
