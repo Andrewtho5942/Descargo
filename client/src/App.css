@@ -39,7 +39,7 @@ h1 {
 
 
 .link-input {
-  width: 95%;
+  width: 85%;
   padding: 5px;
   font-size: 16px;
   margin-bottom: 10px;
@@ -48,6 +48,8 @@ h1 {
   outline: 2px solid rgb(8, 79, 40);
   border: none;
   color: white;
+  margin-right:auto;
+  margin-left:2px
 }
 
 .inline-container {
@@ -58,7 +60,7 @@ h1 {
 }
 
 
-button {
+.download-btn {
   padding: 5px 10px;
   font-size: 16px;
   cursor: pointer;
@@ -67,11 +69,11 @@ button {
   border: none;
   border-radius: 4px;
   margin-top: 5px;
-  margin-right:60px;
+  margin-right:47px;
   transition: background-color 0.2s ease;
 }
 
-button:hover {
+.download-btn:hover {
   background-color: rgb(18, 109, 50);
 }
 
@@ -83,36 +85,30 @@ button:hover {
 .loading {
   width: 48px;
   height: 48px;
-  left:197px;
+  left:200px;
   top: 112px;
 }
 
 .success, .failure {
   width: 24px;
   height: 24px;
-  left: 209px;
+  left: 212px;
   top: 124px;
 }
 
 .format {
- position:absolute;
- left:15px;
- top:120px;
-  padding:2px 5px ;
- color:white;
- background-color: rgb(43, 47, 49);
- border-radius: 5px;
- font-size: large;
+  position:absolute;
+  left:10px;
+  top:119px;
+  color:white;
+  font-size: large;
 }
 
 .gdrive {
   position:absolute;
-  left:255px;
-  top:120px;
-  padding:2px 5px ;
+  left:245px;
+  top:119px;
   color:white;
-  background-color: rgb(43, 47, 49);
-  border-radius: 5px;
   font-size: large;
  }
 
@@ -123,4 +119,143 @@ button:hover {
 
 .toggle:hover {
   cursor:pointer;
+}
+
+.bot-spanner {
+  height:40px;
+  width:100%;
+  background-color: rgb(43, 47, 49);
+  margin-top: 10px;
+  border-radius:5px;
+  display: flex;
+}
+
+.menu-btn {
+  color: rgb(40, 160, 60);
+  font-size:large;
+  padding:0px 8px;
+  height:100%;
+  align-items: center;
+  display: flex;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.3s ease;
+}
+
+.menu-toggle {
+  transition: transform 0.3s ease;
+  margin-right:8px;
+  font-weight: bold;
+  color: #cc3232;
+  padding:0px 6px;
+  background-color:rgb(45, 45, 45);
+  outline:1px solid black;
+  border-radius:4px;
+}
+
+.menu-toggle.inactive {
+  transform: rotate(180deg);
+}
+
+.menu-toggle.active {
+  transform: rotate(0deg);
+}
+
+.clear {
+  color: rgb(40, 160, 60);
+  font-size:large;
+  display:flex;
+  align-items: center;
+  margin:auto;
+  padding: 5px;
+}
+
+.clear-btn {
+  width:25px;
+  height:25px;
+  margin:0px 10px;
+  cursor: pointer;
+  transition: opacity 0.3s ease;
+  opacity: 0.8;
+}
+.clear-btn:hover{
+  opacity: 1;
+
+}
+
+.autofill-btn {
+  position: absolute;
+  cursor: pointer;
+  top:74px;
+  left:321px;
+  color: rgb(40, 160, 60);
+  font-weight: bold;
+  font-size: large;
+  padding:5px 8px;
+  background-color: rgb(43, 47, 49);
+  border-radius:5px;
+  transition: background-color 0.3s ease;
+  user-select: none;
+}
+
+.autofill-btn:hover, .menu-btn:hover{
+  background-color: rgb(45, 55, 45);
+}
+
+
+
+
+/* fancy checkbox styling */
+.checkbox-container input[type="checkbox"] {
+  display: none;
+}
+
+.checkbox-container {
+  display: inline-flex;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 5px;
+  border: 2px solid rgb(30, 30, 30);
+  background-color: rgb(43, 47, 49);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.custom-checkbox {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #555;
+  background-color: white;
+  margin-right: 10px;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+  position: relative;
+}
+
+.checkbox-container input[type="checkbox"]:checked+.custom-checkbox {
+  background-color: #138615;
+  /* Active color */
+  border-color: #138615;
+  border-radius: 3px;
+}
+
+.checkbox-container input[type="checkbox"]:checked+.custom-checkbox::after {
+  display: block;
+}
+
+/* Change colors of the entire container when the checkbox is active */
+.checkbox-container.active {
+  background-color: rgb(8, 79, 40);
+}
+
+/* Create a tick/checkmark */
+.custom-checkbox::after {
+  content: '';
+  display: none;
+  position: absolute;
+  top: 1px;
+  left: 6px;
+  width: 6px;
+  height: 12px;
+  border: solid white;
+  border-width: 0 3px 3px 0;
+  transform: rotate(45deg);
 }

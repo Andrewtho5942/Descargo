@@ -6,12 +6,20 @@ import download from './images/dl.png';
 import loadingGif from './images/loading.gif';
 import xmark from './images/x.png';
 import checkmark from './images/check.png';
+import drive from './images/gd.png';
+import explorer from './images/fe.png';
+
+// TODO: Download m3u8 files from list, use ffmpeg like so to convert to mp4:
+//ffmpeg -protocol_whitelist "file,http,https,tcp,tls" -i "C:\Users\andre\Downloads\aW5kZXgubTN1OA==.m3u8" -c copy output.mp4
 
 function App() {
+  const SERVER_PORT = 5001;
   const [link, setLink] = useState('');
   const [result, setResult] = useState('');
   const [videoFormat, setVideoFormat] = useState(false);
   const [gdrive, setGdrive] = useState(true);
+  const [m3u8Open, setM3u8Open] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
 
   useEffect(() => {
@@ -23,12 +31,41 @@ function App() {
   })
 
   const handleKeyPress = (e) => {
-    switch (e.key) {
-      case 'Enter':
-        submitLink();
-        break;
-      default:
+    const inputFocused =
+      e.target.tagName === 'INPUT' ||
+      e.target.tagName === 'TEXTAREA';
+
+    if (e.key === 'Enter') {
+      submitLink();
+    } else if (!inputFocused) {
+      switch (e.key) {
+        case 'g':
+          toggleGdrive();
+          break;
+        case 'p':
+          toggleVideoFormat();
+          break;
+        case 'm':
+          toggleM3u8Open();
+          break;
+        case 'h':
+          toggleHistoryOpen();
+          break;
+        default:
+      }
     }
+  }
+
+  const autofillLink = () => {
+    browser.tabs.query({ active: true, currentWindow: true })
+      .then(tabs => {
+        const currentTab = tabs[0]; 
+        console.log('current Tab: '+ currentTab.url);
+        setLink(currentTab.url);
+      })
+      .catch(error => {
+        console.error('Error:', error);
+      });
   }
 
   const updateLink = (e) => {
@@ -45,7 +82,7 @@ function App() {
     }
 
     try {
-      const response = await axios.post('http://localhost:5000/download', {
+      const response = await axios.post(`http://localhost:${SERVER_PORT}/download`, {
         url: link,
         format: videoFormat ? 'mp4' : 'm4a',
         gdrive: gdrive
@@ -66,6 +103,26 @@ function App() {
   const toggleGdrive = () => {
     setGdrive(!gdrive);
   }
+
+  const toggleM3u8Open = () => {
+    setM3u8Open(!m3u8Open);
+  }
+
+  const toggleHistoryOpen = () => {
+    setHistoryOpen(!historyOpen);
+  }
+
+  const clearFolder = (local) => {
+    console.log(local)
+    try {
+      axios.post(`http://localhost:${SERVER_PORT}/clear`, {
+        local: local
+      })
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  }
+
   return (
     <div className="App" >
       <img src={download} alt="youtube" className="dl-img"></img>
@@ -81,24 +138,42 @@ function App() {
         className="link-input"
       />
 
-      <div className='format'>
-        MP4?
-        <input type="checkbox" checked={videoFormat} onChange={toggleVideoFormat} className="toggle" />
-      </div>
+      <div className='autofill-btn' onClick={() => { autofillLink() }}>fill</div>
 
-      <button onClick={submitLink}>Download</button>
+
+      <label className={`format checkbox-container ${videoFormat ? 'active' : ''}`}>
+        <input type="checkbox" checked={videoFormat} onChange={toggleVideoFormat} />
+        <span className="custom-checkbox"></span>
+        <span style={{ userSelect: 'none' }} className="checkbox-label">MP4?</span>
+      </label>
+
+
+      <button className="download-btn" onClick={submitLink}>Download</button>
       {result && <img src={
         result === 'loading' ? loadingGif :
           result === 'success' ? checkmark : xmark
       } alt="loading" className={`result ${result}`} />}
 
 
-      <div className='gdrive'>
-        Gdrive?
-        <input type="checkbox" checked={gdrive} onChange={toggleGdrive} className="toggle" />
+      <label className={`gdrive checkbox-container ${gdrive ? 'active' : ''}`}>
+        <input type="checkbox" checked={gdrive} onChange={toggleGdrive} />
+        <span className="custom-checkbox"></span>
+        <span style={{ userSelect: 'none' }} className="checkbox-label">Gdrive?</span>
+      </label>
+
+
+      <div className="bot-spanner">
+        <div className='menu-btn' onClick={toggleM3u8Open}><div className={`menu-toggle ${m3u8Open ? 'active' : 'inactive'}`}>V</div>m3u8</div>
+        <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
+        <div className='menu-btn' onClick={toggleHistoryOpen}><div className={`menu-toggle ${historyOpen ? 'active' : 'inactive'}`}>V</div>history</div>
+        <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
+
+        <div className='clear'>clear:
+          <img src={explorer} onClick={() => clearFolder(true)} alt="explorer" className="clear-btn"></img>
+          <img src={drive} onClick={() => clearFolder(false)} alt="drive" className="clear-btn"></img>
+        </div>
       </div>
 
-      <div style={{ height: '10px' }}></div>
     </div>
   );
 }

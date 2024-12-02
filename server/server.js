@@ -2,11 +2,14 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const { exec } = require('child_process');
-const fs = require('fs')
+const fs = require('fs-extra');
 const { google } = require('googleapis');
 const path = require('path');
 
 const key = require('./keys/yt-dl-443015-d39da117fe4a.json');
+const downloadsPath = "C:\\Users\\andre\\Downloads\\streaming\\yt-downloads"
+const gdriveFolderID = "17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q"
+
 
 const auth = new google.auth.GoogleAuth({
   credentials: key,
@@ -15,7 +18,7 @@ const auth = new google.auth.GoogleAuth({
 const drive = google.drive({ version: 'v3', auth });
 
 const app = express();
-const PORT = 5000;
+const PORT = 5001;
 
 // middleware
 app.use(cors());
@@ -49,7 +52,7 @@ const processVideoTitle = (title) => {
 async function uploadFile(filePath, fileName) {
   const fileMetadata = {
     name: fileName, // Name of the file in Drive
-    parents: ['17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q'],
+    parents: [gdriveFolderID],
   };
 
   const media = {
@@ -77,16 +80,23 @@ app.post('/download', (req, res) => {
   if (!url) {
     return res.status(400).send({ error: 'YouTube URL is required.' });
   }
+  let command = `yt-dlp "${url}"`
+
+  if (format === 'mp4') {
+    command += ' -f \"bv+ba/b\" --merge-output-format mp4'
+  } else {
+    command += ' -f \"ba/b\" -f \"m4a\"'
+  }
 
   // execute yt-dl command to download the youtube video
-  exec(`yt-dlp "${url}" -f "${format}"`, (error, stdout, stderr) => {
+  exec(command, (error, stdout, stderr) => {
     if (error) {
       console.error(`Error: ${stderr}`);
       return res.status(500).send({ error: 'failure' });
     }
 
     if (gdrive) {
-      let latestFilePath = getMostRecentFile("C:\\Users\\andre\\Downloads\\yt-downloads");
+      let latestFilePath = getMostRecentFile(downloadsPath);
       // process the video title without the extension and append the extension to it after...
       let fileName = processVideoTitle(path.basename(latestFilePath, path.extname(latestFilePath))) + path.extname(latestFilePath);
       console.log('uploading ' + fileName)
@@ -96,6 +106,43 @@ app.post('/download', (req, res) => {
     console.log(`Output: ${stdout}`);
     res.send({ message: 'success', output: stdout });
   });
+});
+
+
+// clear a folder
+app.post('/clear', (req, res) => {
+  const { local } = req.body;
+  if (local) {
+    // clear local downloads folder
+    fs.emptyDir(downloadsPath)
+      .then(() => {
+        console.log('cleared local folder')
+        res.send({ message: 'success' });
+      })
+      .catch(err => {
+        console.log("Error clearing local folder:", err);
+        res.send({ message: 'error' });
+      });
+  } else {
+  // clear gdrive downloads folder (only files that the bot uploaded)
+  drive.files.list({
+    q: `'${gdriveFolderID}' in parents and trashed = false`,
+    fields: 'files(id, name)',
+  }).then((response) => {
+    const files = response.data.files;
+    if (!files || files.length === 0) {
+      console.log('Clear Gdrive: Folder is already empty');
+      return;
+    }
+    const deleteFiles = files.map((file) =>
+      drive.files.delete({ fileId: file.id }).then(() => {
+        console.log(`Deleted file: ${file.name} (ID: ${file.id})`);
+      })
+    );
+
+    return Promise.all(deleteFiles)
+  })
+}
 });
 
 // start the server
