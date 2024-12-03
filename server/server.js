@@ -18,7 +18,7 @@ const auth = new google.auth.GoogleAuth({
 const drive = google.drive({ version: 'v3', auth });
 
 const app = express();
-const PORT = 5001;
+const PORT = 5000;
 
 // middleware
 app.use(cors());
@@ -108,6 +108,33 @@ app.post('/download', (req, res) => {
   });
 });
 
+//open a folder
+app.post('/open', (req, res) => {
+  let command = `start "" /D "${downloadsPath}" explorer "${downloadsPath}"`;
+  // open the file explorer to yt-downloads folder
+  //exec(command, (err, stdout, stderr) => {
+  //  if (err) {
+  //    console.error('Error opening folder:', err);
+  //    return res.status(500).send({ message: 'Failed to open folder' });
+  //  }
+  //  console.log('Folder opened successfully');
+
+
+    exec('"C:\\Program Files\\AutoHotkey\\v2\\AutoHotkey.exe" "C:\\Users\\andre\\focusExplorer.ahk"', (err, out, errst) => {
+      if (err) {
+        console.error(`Error bringing window to front: ${err.message}`);
+      }
+      if (errst) {
+        console.error(`stderr: ${errst}`);
+      }
+      console.log(`ahk script executed successfully`);
+    });
+    
+    res.send({ message: 'Folder opened successfully' });
+  });
+//});
+
+
 
 // clear a folder
 app.post('/clear', (req, res) => {
@@ -124,25 +151,33 @@ app.post('/clear', (req, res) => {
         res.send({ message: 'error' });
       });
   } else {
-  // clear gdrive downloads folder (only files that the bot uploaded)
-  drive.files.list({
-    q: `'${gdriveFolderID}' in parents and trashed = false`,
-    fields: 'files(id, name)',
-  }).then((response) => {
-    const files = response.data.files;
-    if (!files || files.length === 0) {
-      console.log('Clear Gdrive: Folder is already empty');
-      return;
-    }
-    const deleteFiles = files.map((file) =>
-      drive.files.delete({ fileId: file.id }).then(() => {
-        console.log(`Deleted file: ${file.name} (ID: ${file.id})`);
-      })
-    );
+    // clear gdrive downloads folder (only files that the bot uploaded)
+    drive.files.list({
+      q: `'${gdriveFolderID}' in parents and trashed = false`,
+      fields: 'files(id, name)',
+    }).then((response) => {
+      const files = response.data.files;
+      if (!files || files.length === 0) {
+        console.log('Clear Gdrive: Folder is already empty');
+        res.send({ message: 'success' });
+        return;
+      }
 
-    return Promise.all(deleteFiles)
-  })
-}
+      const deleteFiles = files.map((file) =>
+        drive.files.delete({ fileId: file.id }).then(() => {
+          console.log(`Deleted file: ${file.name} (ID: ${file.id})`);
+        })
+      );
+
+      Promise.all(deleteFiles).then(() => {
+        res.send({ message: 'success' });
+      }).catch(() => {
+        res.send({ message: 'error' });
+      });
+    }).catch(() => {
+      res.send({ message: 'error' });
+    });
+  }
 });
 
 // start the server
