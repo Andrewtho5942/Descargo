@@ -3,6 +3,7 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 module.exports = {
   entry: './src/index.js',
+  mode: 'production',
   output: {
     path: path.resolve(__dirname, 'bundle'),
     filename: 'bundle.js',
@@ -38,8 +39,16 @@ module.exports = {
     }),
   ],
   devServer: {
-    contentBase: path.join(__dirname, 'public'),
+    static: {
+      directory: __dirname,//path.join(__dirname, 'public'), // Serve static files from 'public'
+    },
+    allowedHosts: "all",
     port: 3000,
     open: true,
+    hot: true, 
+    historyApiFallback: true,
+    server: {
+      type: 'http',
+    },
   },
 };

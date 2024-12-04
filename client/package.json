@@ -19,7 +19,7 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "build-extension": "webpack --mode production",
-    "start-extension": "webpack serve --mode development"
+    "start-extension": "webpack serve"
   },
   "eslintConfig": {
     "extends": [

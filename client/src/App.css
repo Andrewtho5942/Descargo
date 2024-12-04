@@ -244,7 +244,7 @@ h1 {
 /* collapsible menus */
 .collapsible-menu {
   position: absolute;
-  transition: transform 0.5s ease;
+  transition: transform 0.4s ease;
   width: 100%;
   top: 70px;
   left: 0;
