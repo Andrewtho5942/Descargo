@@ -2,6 +2,7 @@ import './App.css';
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useTimeoutState } from './useTimeoutState';
+import validator from 'validator'
 
 import download from './images/dl.png';
 import loadingGif from './images/loading.gif';
@@ -16,17 +17,16 @@ import explorer from './images/fe.png';
 function App() {
   const SERVER_PORT = 5000;
   const gdriveFolderID = "17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q"
-  let googleDriveWindow = null;
   const [link, setLink] = useState('');
   const [result, setResult] = useState('');
   const [videoFormat, setVideoFormat] = useState(false);
   const [gdrive, setGdrive] = useState(true);
   const [m3u8Open, setM3u8Open] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [underline1, setUnderline1] = useTimeoutState('transparent')
-  const [underline2, setUnderline2] = useTimeoutState('transparent')
-  const [openFiles, setOpenFiles] = useState(true)
-
+  const [fileBg1, setFileBg1] = useTimeoutState('transparent');
+  const [fileBg2, setFileBg2] = useTimeoutState('transparent');
+  const [openFiles, setOpenFiles] = useState(true);
+  const [m3u8Links, setM3u8Links] = useState(['testidk', 'https://www.twitch.tv/emiru', 'https://www.twitch.tv/emiru']);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyPress);
@@ -40,7 +40,6 @@ function App() {
     const inputFocused =
       e.target.tagName === 'INPUT' ||
       e.target.tagName === 'TEXTAREA';
-
     if (e.key === 'Enter') {
       submitLink();
     } else if (!inputFocused) {
@@ -52,10 +51,19 @@ function App() {
           setVideoFormat(!videoFormat);
           break;
         case 'm':
+          setHistoryOpen(false);
           setM3u8Open(!m3u8Open);
           break;
         case 'h':
+          setM3u8Open(false);
           setHistoryOpen(!historyOpen);
+          break;
+        case 'o':
+          setOpenFiles(!openFiles);
+          break;
+        case 'Backspace':
+          setHistoryOpen(false);
+          setM3u8Open(false);
           break;
         default:
       }
@@ -72,6 +80,10 @@ function App() {
       .catch(error => {
         console.error('Error:', error);
       });
+  }
+
+  const download_m3u8 = (link) => {
+    console.log('downloading ' + link + '...');
   }
 
   const updateLink = (e) => {
@@ -103,7 +115,7 @@ function App() {
   };
 
   const clearFolder = (local) => {
-    let setUnderline = local ? setUnderline1 : setUnderline2
+    let setBg = local ? setFileBg1 : setFileBg2
 
     try {
       axios.post(`http://localhost:${SERVER_PORT}/clear`, {
@@ -113,11 +125,11 @@ function App() {
         if (response.data.message === 'success') {
           color = 'green'
         }
-        // update the underline color
-        setUnderline(color);
+        // update the background color
+        setBg(color);
 
         // clear the current timeout for this button and set a new timeout to reset the color to white
-        setUnderline(color, { timeout: 750 })
+        setBg(color, { timeout: 750 })
       });
     } catch (error) {
       console.error('Error:', error);
@@ -137,18 +149,7 @@ function App() {
       }
     } else {
       const url = `https://drive.google.com/drive/folders/${gdriveFolderID}`;
-      console.log('google drive window:')
-      console.log(googleDriveWindow)
-      // check if the google drive tab is already open
-      if (googleDriveWindow && !googleDriveWindow.closed) {
-        console.log('already open')
-        // focus existing tab
-        googleDriveWindow.focus();
-      } else {
-        console.log('new tab')
-        //open new tab to google drive downloads folder
-        googleDriveWindow = window.open(url, '_blank');
-      }
+      window.open(url);
     }
   }
 
@@ -192,22 +193,41 @@ function App() {
 
 
       <div className="bot-spanner">
-        <div className='menu-btn' onClick={() => { setM3u8Open(!m3u8Open) }}><div className={`menu-toggle ${m3u8Open ? 'active' : 'inactive'}`}>V</div>m3u8</div>
+        <div className='menu-btn' onClick={() => { setHistoryOpen(false); setM3u8Open(!m3u8Open) }}><div className={`menu-toggle m3u8 ${m3u8Open ? 'active' : 'inactive'}`}>V</div>m3u8</div>
         <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
-        <div className='menu-btn' onClick={() => { setHistoryOpen(!historyOpen) }}><div className={`menu-toggle ${historyOpen ? 'active' : 'inactive'}`}>V</div>history</div>
+        <div className='menu-btn' onClick={() => { setM3u8Open(false); setHistoryOpen(!historyOpen) }}><div className={`menu-toggle history ${historyOpen ? 'active' : 'inactive'}`}>V</div>history</div>
         <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
 
         <div className='file-ops'>
           <div className='clear-open-toggle' onClick={() => { setOpenFiles(!openFiles) }}>{openFiles ? 'open' : 'clear'}</div>
 
-          <div className='file-btn-wrapper' style={{ '--underline-color': underline1 }}>
+          <div className='file-btn-wrapper' style={{ '--bg-color': fileBg1 }}>
             <img src={explorer} onClick={() => { openFiles ? openFolder(true) : clearFolder(true) }} alt="explorer" className="file-btn" draggable="false"></img>
           </div>
-          <div className='file-btn-wrapper' style={{ '--underline-color': underline2 }}>
+          <div className='file-btn-wrapper' style={{ '--bg-color': fileBg2 }}>
             <img src={drive} onClick={() => { openFiles ? openFolder(false) : clearFolder(false) }} alt="drive" className="file-btn" draggable="false"></img>
           </div>
         </div>
+      </div>
 
+      {/* Collapsible menus */}
+      <div className={`m3u8-menu collapsible-menu ${m3u8Open ? 'open' : 'closed'}`}>
+        <table className='m3u8-table'>
+          <tbody>
+            {m3u8Links.map((link) => {
+              const isURL = validator.isURL(link);
+              const dl_image = isURL ? download : xmark;
+              return <tr className='m3u8-entry'>
+                <td className='m3u8-link'>{isURL ? <a href={link}>{link}</a> : link}</td>
+                <td className={`m3u8-dl ${isURL ? 'valid-url' : ''}`}><img src={dl_image} onClick={() => {isURL ? download_m3u8(link):''}} draggable="false"></img></td>
+              </tr>
+            })
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div className={`history-menu collapsible-menu ${historyOpen ? 'open' : 'closed'}`}>
       </div>
     </div>
   );
