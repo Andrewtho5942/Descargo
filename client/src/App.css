@@ -249,30 +249,32 @@ h1 {
   top: 70px;
   left: 0;
   background-color: rgb(20, 22, 22);
-  height: 90px;
-  overflow: hidden;
+  height: 82px;
 }
 
 .m3u8-menu {
   transform: translateX(-100%);
+  overflow: hidden;
+
 }
 
 .history-menu {
   transform: translateX(100%);
+  overflow-y: auto;
 }
 
 .open {
   transform: translateX(0);
 }
 /* m3u8 menu */
-.m3u8-table {
+.m3u8-table, .history-table{
   margin: 5px 10px;
   border-collapse: collapse;
   width: 300px; /* Set the table width */
   table-layout: fixed; /* Ensures fixed table layout */
 }
 
-.m3u8-table td {
+.m3u8-table td, .history-table td {
   outline: 1px solid black;
   padding: 2px 5px;
   vertical-align: middle;
@@ -284,6 +286,7 @@ h1 {
   width: 100%;
   transition: background-color 0.3s ease;
 }
+
 
 .m3u8-entry:hover {
   background-color: rgb(30, 35, 30);
@@ -311,26 +314,38 @@ h1 {
   height: 15px;
 }
 
+/* history table */
+.history-entry {
+  color: lightgray;
+  width:100%;
+}
+
+.history-timestamp {
+  width:120px;
+}
+.history-link {
+  width:205px;
+}
+
 /* Styles for the content inside the cells */
 .timestamp-content,
-.link-content {
+.link-content,
+.history-content {
   overflow-x: auto;
   white-space: nowrap;
 }
 
 /* Optional: Hide scrollbars */
 .timestamp-content::-webkit-scrollbar,
-.link-content::-webkit-scrollbar {
-  display: none; /* Hide scrollbars in WebKit browsers */
+.link-content::-webkit-scrollbar,
+.history-content::-webkit-scrollbar {
+  display: none;
 }
 
-.timestamp-content {
-  scrollbar-width: none; /* Hide scrollbar in Firefox */
+.timestamp-content, .link-content, .history-content {
+  scrollbar-width: none; 
 }
 
-.link-content {
-  scrollbar-width: none; /* Hide scrollbar in Firefox */
-}
 
 /* fancy checkbox styling */
 .checkbox-container input[type="checkbox"] {

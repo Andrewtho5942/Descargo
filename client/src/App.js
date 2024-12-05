@@ -1,5 +1,5 @@
 import './App.css';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useTimeoutState } from './useTimeoutState';
 import validator from 'validator'
@@ -11,11 +11,8 @@ import checkmark from './images/check.png';
 import drive from './images/gd.png';
 import explorer from './images/fe.png';
 
-// TODO: Download m3u8 files from list, use ffmpeg like so to convert to mp4:
-//ffmpeg -protocol_whitelist "file,http,https,tcp,tls" -i "C:\Users\andre\Downloads\aW5kZXgubTN1OA==.m3u8" -c copy output.mp4
-
 function App() {
-  const SERVER_PORT = 5001;
+  const SERVER_PORT = 5000;
   const gdriveFolderID = "17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q"
   const [link, setLink] = useState('');
   const [result, setResult] = useState('');
@@ -27,7 +24,14 @@ function App() {
   const [fileBg2, setFileBg2] = useTimeoutState('transparent');
   const [openFiles, setOpenFiles] = useState(true);
   const [m3u8Links, setM3u8Links] = useState([]);
+  const [history, setHistory] = useState([])
+  const historyRef = useRef(history);
 
+  useEffect(() => {
+    historyRef.current = history;
+  }, [history]);
+
+  // listen to key presses for hotkeys
   useEffect(() => {
     window.addEventListener('keydown', handleKeyPress);
 
@@ -36,18 +40,27 @@ function App() {
     };
   })
 
-  // reload m3u8 links from storage when opening the popup
+  // reload m3u8 links and history from storage when loading the popup
   useEffect(() => {
-    browser.storage.local.get('m3u8_links')
-      .then((result) => {
-        const links = result.m3u8_links || [];
-        console.log('retrieved links:')
-        console.log(links);
-        setM3u8Links(links);
-      })
-      .catch((error) => {
-        console.error('Error retrieving links:', error);
-      });
+    // m3u8 links
+    browser.storage.local.get('m3u8_links').then((result) => {
+      const links = result.m3u8_links || [];
+      console.log('retrieved links:')
+      console.log(links);
+      setM3u8Links(links);
+    }).catch((error) => {
+      console.error('Error retrieving m3u8 links:', error);
+    });
+
+    // history
+    browser.storage.local.get('history').then((result) => {
+      const history = result.history || [];
+      console.log('retrieved history:')
+      console.log(history);
+      setHistory(history);
+    }).catch((error) => {
+      console.error('Error retrieving history:', error);
+    });
   }, []);
 
   // update the links in real time by listening to storage changes
@@ -65,7 +78,63 @@ function App() {
     };
   }, []);
 
+  // listen to the server for progress updates on downloads
+  useEffect(() => {
+    // Start the SSE connection
+    const eventSource = new EventSource(`http://localhost:${SERVER_PORT}/progress`);
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.progress) {
+        console.log('progress update: ' + data.progress)
+        let progressFloat = parseFloat(data.progress);
 
+        const updatedHistory = historyRef.current.map(item => {
+          if (item.timestamp === data.timestamp) {
+            return { ...item, progress: progressFloat };
+          }
+          return item;
+        });
+
+        if(history[0] !== updatedHistory[0]){
+          setHistory(updatedHistory)
+        }
+      }
+      if (data.progress == 100) {
+        console.log('Download completed');
+        eventSource.close();
+      }
+
+      if (data.status === 'error') {
+        console.error('An error occurred during download');
+        eventSource.close();
+      }
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('EventSource failed:', err);
+      eventSource.close();
+    };
+
+    // Clean up on component unmount
+    return () => {
+      eventSource.close();
+    };
+  }, []);
+
+
+  const addToHistory = (file, progress, timestamp) => {
+    let newHistory = history;
+    newHistory.unshift({ file, progress, timestamp })
+
+    if (newHistory.length > 12) {
+      newHistory = newHistory.slice(0, 12);
+    }
+    setHistory(newHistory);
+
+    browser.storage.local.set({ history: newHistory }).then(() => {
+      console.log('Stored history:', newHistory[0]);
+    });
+  }
 
   const handleKeyPress = (e) => {
     const inputFocused =
@@ -114,8 +183,17 @@ function App() {
   }
 
   const download_m3u8 = (link) => {
+    const timestamp = new Date().toISOString()
     console.log('downloading ' + link + '...');
-
+    try {
+      axios.post(`http://localhost:${SERVER_PORT}/download_m3u8`, {
+        link: link,
+        timestamp:timestamp
+      });
+      addToHistory(link, 0, timestamp);
+    } catch (error) {
+      console.error('Error:', error);
+    }
   }
 
   const updateLink = (e) => {
@@ -263,7 +341,7 @@ function App() {
                   <td className={`m3u8-dl ${isURL ? 'valid-url' : ''}`}><img src={dl_image} onClick={() => { isURL ? download_m3u8(m3u8_link) : '' }} draggable="false"></img></td>
                 </tr>
               } catch (e) {
-                console.log('m3u8_item: ')
+                console.log('error in m3u8_item: ')
                 console.log(item)
               }
             })
@@ -273,6 +351,34 @@ function App() {
       </div>
 
       <div className={`history-menu collapsible-menu ${historyOpen ? 'open' : 'closed'}`}>
+        <table className='history-table'>
+          <tbody>
+            {history.map((item) => {
+              try {
+                const { file, progress, timestamp } = item;
+
+                const isURL = validator.isURL(file);
+
+                return <tr className='history-entry' style={{
+                  background: `linear-gradient(to right, rgba(0, 255, 0, 0.2) ${progress}%, transparent ${progress}%)`,
+                }}>
+                  <td className='history-timestamp'><div className='timestamp-content'>{new Date(timestamp).toLocaleTimeString([], {
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                  })}</div></td>
+                  <td className='history-link'><div className='history-content'>{isURL ? <a href={file}>{file}</a> : file}</div></td>
+                </tr>
+              } catch (e) {
+                console.log('error in history_item: ')
+                console.log(item)
+              }
+            })
+            }
+          </tbody>
+        </table>
       </div>
     </div>
   );

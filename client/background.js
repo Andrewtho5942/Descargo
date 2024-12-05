@@ -7,7 +7,7 @@ function storeLink(link) {
             links.unshift({ link, timestamp });
             // Keep the links size to a max of 3
             if (links.length > 3) {
-                links = links.slice(-3);
+                links = links.slice(0,3);
             }
 
             browser.storage.local.set({ m3u8_links: links }).then(() => {
@@ -21,7 +21,6 @@ function storeLink(link) {
 
 function handleM3U8Request(details) {
     const url = details.url;
-    console.log(url)
     if (url.endsWith('.m3u8')) {
         console.log('Detected .m3u8 request:', url);
         storeLink(url)
