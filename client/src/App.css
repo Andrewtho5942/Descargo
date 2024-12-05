@@ -264,16 +264,19 @@ h1 {
 .open {
   transform: translateX(0);
 }
-
 /* m3u8 menu */
 .m3u8-table {
-  margin: 5px 10px 5px 10px;
+  margin: 5px 10px;
   border-collapse: collapse;
+  width: 300px; /* Set the table width */
+  table-layout: fixed; /* Ensures fixed table layout */
 }
 
 .m3u8-table td {
   outline: 1px solid black;
   padding: 2px 5px;
+  vertical-align: middle;
+  overflow: hidden; /* Hide overflow in td */
 }
 
 .m3u8-entry {
@@ -286,18 +289,17 @@ h1 {
   background-color: rgb(30, 35, 30);
 }
 
+.m3u8-timestamp {
+  width: 65px;
+}
+
 .m3u8-link {
-  width: 300px;
-  overflow-x: auto;
-  white-space: nowrap;
-  display: block;
+  width: 230px;
 }
 
 .m3u8-dl {
-  width: 50px;
-  justify-content: center;
-  align-items: center;
-
+  width: 20px;
+  text-align: center;
 }
 
 .m3u8-dl.valid-url {
@@ -307,12 +309,28 @@ h1 {
 .m3u8-dl img {
   width: 15px;
   height: 15px;
-  margin-left: 5px;
-  margin-top: 2px;
 }
 
+/* Styles for the content inside the cells */
+.timestamp-content,
+.link-content {
+  overflow-x: auto;
+  white-space: nowrap;
+}
 
+/* Optional: Hide scrollbars */
+.timestamp-content::-webkit-scrollbar,
+.link-content::-webkit-scrollbar {
+  display: none; /* Hide scrollbars in WebKit browsers */
+}
 
+.timestamp-content {
+  scrollbar-width: none; /* Hide scrollbar in Firefox */
+}
+
+.link-content {
+  scrollbar-width: none; /* Hide scrollbar in Firefox */
+}
 
 /* fancy checkbox styling */
 .checkbox-container input[type="checkbox"] {

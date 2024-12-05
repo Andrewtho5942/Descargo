@@ -26,7 +26,7 @@ function App() {
   const [fileBg1, setFileBg1] = useTimeoutState('transparent');
   const [fileBg2, setFileBg2] = useTimeoutState('transparent');
   const [openFiles, setOpenFiles] = useState(true);
-  const [m3u8Links, setM3u8Links] = useState(['testidk', 'https://www.twitch.tv/emiru', 'https://www.twitch.tv/emiru']);
+  const [m3u8Links, setM3u8Links] = useState([]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyPress);
@@ -35,6 +35,37 @@ function App() {
       window.removeEventListener('keydown', handleKeyPress);
     };
   })
+
+  // reload m3u8 links from storage when opening the popup
+  useEffect(() => {
+    browser.storage.local.get('m3u8_links')
+      .then((result) => {
+        const links = result.m3u8_links || [];
+        console.log('retrieved links:')
+        console.log(links);
+        setM3u8Links(links);
+      })
+      .catch((error) => {
+        console.error('Error retrieving links:', error);
+      });
+  }, []);
+
+  // update the links in real time by listening to storage changes
+  useEffect(() => {
+    function handleStorageChange(changes, area) {
+      if (area === 'local' && changes.m3u8_links) {
+        setM3u8Links(changes.m3u8_links.newValue || []);
+      }
+    }
+
+    browser.storage.onChanged.addListener(handleStorageChange);
+
+    return () => {
+      browser.storage.onChanged.removeListener(handleStorageChange);
+    };
+  }, []);
+
+
 
   const handleKeyPress = (e) => {
     const inputFocused =
@@ -84,6 +115,7 @@ function App() {
 
   const download_m3u8 = (link) => {
     console.log('downloading ' + link + '...');
+
   }
 
   const updateLink = (e) => {
@@ -214,13 +246,26 @@ function App() {
       <div className={`m3u8-menu collapsible-menu ${m3u8Open ? 'open' : 'closed'}`}>
         <table className='m3u8-table'>
           <tbody>
-            {m3u8Links.map((link) => {
-              const isURL = validator.isURL(link);
-              const dl_image = isURL ? download : xmark;
-              return <tr className='m3u8-entry'>
-                <td className='m3u8-link'>{isURL ? <a href={link}>{link}</a> : link}</td>
-                <td className={`m3u8-dl ${isURL ? 'valid-url' : ''}`}><img src={dl_image} onClick={() => {isURL ? download_m3u8(link):''}} draggable="false"></img></td>
-              </tr>
+            {m3u8Links.map((item) => {
+              try {
+                const m3u8_link = item.link;
+                const timestamp = item.timestamp;
+
+                const isURL = validator.isURL(m3u8_link);
+                const dl_image = isURL ? download : xmark;
+                return <tr className='m3u8-entry'>
+                  <td className='m3u8-timestamp'><div className='timestamp-content'>{new Date(timestamp).toLocaleTimeString([], {
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                  })}</div></td>
+                  <td className='m3u8-link'><div className='link-content'>{isURL ? <a href={m3u8_link}>{m3u8_link}</a> : m3u8_link}</div></td>
+                  <td className={`m3u8-dl ${isURL ? 'valid-url' : ''}`}><img src={dl_image} onClick={() => { isURL ? download_m3u8(m3u8_link) : '' }} draggable="false"></img></td>
+                </tr>
+              } catch (e) {
+                console.log('m3u8_item: ')
+                console.log(item)
+              }
             })
             }
           </tbody>
