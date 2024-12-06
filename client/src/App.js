@@ -25,20 +25,21 @@ function App() {
   const [openFiles, setOpenFiles] = useState(true);
   const [m3u8Links, setM3u8Links] = useState([]);
   const [history, setHistory] = useState([])
+  const [m3u8bg, setM3u8bg] = useState([false, false, false])
   const historyRef = useRef(history);
+  const linkRef = useRef(link);
+  const videoFormatRef = useRef(videoFormat);
 
+  //update the useRefs
   useEffect(() => {
     historyRef.current = history;
   }, [history]);
-
-  // listen to key presses for hotkeys
   useEffect(() => {
-    window.addEventListener('keydown', handleKeyPress);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyPress);
-    };
-  })
+    videoFormatRef.current = videoFormat;
+  }, [videoFormat]);
+  useEffect(() => {
+    linkRef.current = link;
+  }, [link]);
 
   // reload m3u8 links and history from storage when loading the popup
   useEffect(() => {
@@ -63,11 +64,25 @@ function App() {
     });
   }, []);
 
-  // update the links in real time by listening to storage changes
+  // update the links and history in real time by listening to storage changes
   useEffect(() => {
+    console.log('mounting storage listener')
     function handleStorageChange(changes, area) {
+      console.log('storage change detected:')
+      console.log(changes);
+      console.log(area);
+
+      // update the m3u8 links
       if (area === 'local' && changes.m3u8_links) {
+        console.log('updated m3u8 links from storage.')
         setM3u8Links(changes.m3u8_links.newValue || []);
+      }
+
+      // update the history
+      if (area === 'local' && changes.history) {
+        setHistory(changes.history.newValue || []);
+        console.log('updated history from storage:');
+        console.log(changes.history.newValue);
       }
     }
 
@@ -79,52 +94,73 @@ function App() {
   }, []);
 
   // listen to the server for progress updates on downloads
+  // useEffect(() => {
+  //   console.log('opening sse connection...')
+  //   // Start the SSE connection
+  //   const eventSource = new EventSource(`http://localhost:${SERVER_PORT}/progress`);
+
+  //   eventSource.onmessage = (event) => {
+  //     const data = JSON.parse(event.data);
+  //     if (data.progress) {
+  //       console.log('progress update: ' + data.progress)
+  //       let progressFloat = parseFloat(data.progress);
+
+  //       let newStatus = 'in-progress'
+
+  //       if (data.progress == 100) {
+  //         console.log('download finished!');
+  //         newStatus = 'completed'
+  //       }
+
+  //       if (data.status === 'error') {
+  //         console.error('An error occurred during download');
+  //         newStatus = 'error'
+  //       }
+
+  //       eventSource.onerror = (err) => {
+  //         console.error('EventSource failed:', err);
+  //         newStatus = 'error'
+  //       };
+
+  //       const updatedHistory = historyRef.current.map(item => {
+  //         if (item.timestamp === data.timestamp) {
+  //           return { ...item, progress: progressFloat, status: newStatus };
+  //         }
+  //         return item;
+  //       });
+
+  //       if (history[0] !== updatedHistory[0]) {
+  //         setHistory(updatedHistory)
+  //       }
+
+  //       if (newStatus !== 'in-progress') {
+  //         browser.storage.local.set({ history: updatedHistory }).then(() => {
+  //           console.log('Stored updated history item');
+  //         });
+  //       }
+  //     };
+
+  //   }
+
+
+  //   // Clean up on component unmount
+  //   return () => {
+  //     eventSource.close();
+  //   };
+  // }, []);
+
+  // listen to key presses for hotkeys
   useEffect(() => {
-    // Start the SSE connection
-    const eventSource = new EventSource(`http://localhost:${SERVER_PORT}/progress`);
-    eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.progress) {
-        console.log('progress update: ' + data.progress)
-        let progressFloat = parseFloat(data.progress);
-
-        const updatedHistory = historyRef.current.map(item => {
-          if (item.timestamp === data.timestamp) {
-            return { ...item, progress: progressFloat };
-          }
-          return item;
-        });
-
-        if(history[0] !== updatedHistory[0]){
-          setHistory(updatedHistory)
-        }
-      }
-      if (data.progress == 100) {
-        console.log('Download completed');
-        eventSource.close();
-      }
-
-      if (data.status === 'error') {
-        console.error('An error occurred during download');
-        eventSource.close();
-      }
-    };
-
-    eventSource.onerror = (err) => {
-      console.error('EventSource failed:', err);
-      eventSource.close();
-    };
-
-    // Clean up on component unmount
+    window.addEventListener('keydown', handleKeyPress);
     return () => {
-      eventSource.close();
+      window.removeEventListener('keydown', handleKeyPress);
     };
-  }, []);
+  }, [])
 
 
-  const addToHistory = (file, progress, timestamp) => {
+  const addToHistory = (file, progress, timestamp, status) => {
     let newHistory = history;
-    newHistory.unshift({ file, progress, timestamp })
+    newHistory.unshift({ file, progress, timestamp, status })
 
     if (newHistory.length > 12) {
       newHistory = newHistory.slice(0, 12);
@@ -145,25 +181,28 @@ function App() {
     } else if (!inputFocused) {
       switch (e.key) {
         case 'g':
-          setGdrive(!gdrive);
+          setGdrive((prevGDrive) => !prevGDrive);
           break;
         case 'p':
-          setVideoFormat(!videoFormat);
+          setVideoFormat((prevVideoFormat) => !prevVideoFormat);
           break;
         case 'm':
           setHistoryOpen(false);
-          setM3u8Open(!m3u8Open);
+          setM3u8Open((prevM3u8Open) => !prevM3u8Open);
           break;
         case 'h':
           setM3u8Open(false);
-          setHistoryOpen(!historyOpen);
+          setHistoryOpen((prevHistoryOpen) => !prevHistoryOpen);
           break;
         case 'o':
-          setOpenFiles(!openFiles);
+          setOpenFiles((prevOpenFiles) => !prevOpenFiles);
           break;
         case 'Backspace':
           setHistoryOpen(false);
           setM3u8Open(false);
+          break;
+        case 'f':
+          autofillLink();
           break;
         default:
       }
@@ -182,15 +221,31 @@ function App() {
       });
   }
 
-  const download_m3u8 = (link) => {
-    const timestamp = new Date().toISOString()
+  const download_m3u8 = (link, index) => {
+    const timestamp = new Date().toISOString();
+
+    // set the background to green
+
+    setM3u8bg((prevbgs) => {
+      const newbgs = [...prevbgs];
+      newbgs[index] = true;
+      return newbgs
+    });
+    setTimeout(() => {
+      setM3u8bg((prevbgs) => {
+        const newbgs = [...prevbgs];
+        newbgs[index] = false;
+        return newbgs
+      });
+    }, 200)
+
     console.log('downloading ' + link + '...');
     try {
       axios.post(`http://localhost:${SERVER_PORT}/download_m3u8`, {
         link: link,
-        timestamp:timestamp
+        timestamp: timestamp
       });
-      addToHistory(link, 0, timestamp);
+      addToHistory(link, 0, timestamp, 'in-progress');
     } catch (error) {
       console.error('Error:', error);
     }
@@ -198,24 +253,32 @@ function App() {
 
   const updateLink = (e) => {
     let newText = e.target.value;
-    console.log('updated link to: ' + newText);
+    console.log('updating link: ' + newText)
     setLink(newText);
   };
 
-  const submitLink = async () => {
+  const submitLink = () => {
     setResult('loading');
-    if (!link) {
+    if (!linkRef.current) {
       setResult('failure');
       return;
     }
 
     try {
-      const response = await axios.post(`http://localhost:${SERVER_PORT}/download`, {
-        url: link,
-        format: videoFormat ? 'mp4' : 'm4a',
-        gdrive: gdrive
+      const timestamp = new Date().toISOString();
+      addToHistory(linkRef.current, 0, timestamp, 'in-progress')
+
+      axios.post(`http://localhost:${SERVER_PORT}/download`, {
+        url: linkRef.current,
+        format: videoFormatRef.current ? 'mp4' : 'm4a',
+        gdrive: gdrive,
+        timestamp: timestamp
+      }).then((response) => {
+        console.log('download response: ')
+        console.log(response.data.message)
+        setResult(response.data.message);
       });
-      setResult(response.data.message);
+
     } catch (error) {
       console.error('Error:', error);
       setResult('failure');
@@ -273,7 +336,7 @@ function App() {
       <input
         type="text"
         value={link}
-        onChange={updateLink}
+        onChange={(e) => { updateLink(e) }}
         placeholder="Enter YouTube URL"
         className="link-input"
       />
@@ -282,30 +345,31 @@ function App() {
 
 
       <label className={`format checkbox-container ${videoFormat ? 'active' : ''}`}>
-        <input type="checkbox" checked={videoFormat} onChange={() => { setVideoFormat(!videoFormat) }} />
+        <input type="checkbox" checked={videoFormat} onChange={() => { setVideoFormat((prevVideoFormat) => !prevVideoFormat) }} />
         <span className="custom-checkbox"></span>
         <span style={{ userSelect: 'none' }} className="checkbox-label">MP4?</span>
       </label>
 
 
-      <button className="download-btn" onClick={submitLink}>Download</button>
+      <button className="download-btn" onClick={() => { submitLink() }}>Download</button>
       {result && <img src={
         result === 'loading' ? loadingGif :
           result === 'success' ? checkmark : xmark
-      } alt="loading" className={`result ${result}`} />}
+      } alt="loading" className={`result ${result}`} />
+      }
 
 
       <label className={`gdrive checkbox-container ${gdrive ? 'active' : ''}`}>
-        <input type="checkbox" checked={gdrive} onChange={() => { setGdrive(!gdrive) }} />
+        <input type="checkbox" checked={gdrive} onChange={() => { setGdrive((prevGdrive) => !prevGdrive) }} />
         <span className="custom-checkbox"></span>
         <span style={{ userSelect: 'none' }} className="checkbox-label">Gdrive?</span>
       </label>
 
 
       <div className="bot-spanner">
-        <div className='menu-btn' onClick={() => { setHistoryOpen(false); setM3u8Open(!m3u8Open) }}><div className={`menu-toggle m3u8 ${m3u8Open ? 'active' : 'inactive'}`}>V</div>m3u8</div>
+        <div className='menu-btn' onClick={() => { setHistoryOpen(false); setM3u8Open((prevM3u8Open) => !prevM3u8Open) }}><div className={`menu-toggle m3u8 ${m3u8Open ? 'active' : 'inactive'}`}>V</div>m3u8</div>
         <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
-        <div className='menu-btn' onClick={() => { setM3u8Open(false); setHistoryOpen(!historyOpen) }}><div className={`menu-toggle history ${historyOpen ? 'active' : 'inactive'}`}>V</div>history</div>
+        <div className='menu-btn' onClick={() => { setM3u8Open(false); setHistoryOpen((prevHistoryOpen) => !prevHistoryOpen) }}><div className={`menu-toggle history ${historyOpen ? 'active' : 'inactive'}`}>V</div>history</div>
         <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
 
         <div className='file-ops'>
@@ -324,8 +388,9 @@ function App() {
       <div className={`m3u8-menu collapsible-menu ${m3u8Open ? 'open' : 'closed'}`}>
         <table className='m3u8-table'>
           <tbody>
-            {m3u8Links.map((item) => {
+            {m3u8Links.map((item, index) => {
               try {
+
                 const m3u8_link = item.link;
                 const timestamp = item.timestamp;
 
@@ -338,7 +403,9 @@ function App() {
                     hour12: true,
                   })}</div></td>
                   <td className='m3u8-link'><div className='link-content'>{isURL ? <a href={m3u8_link}>{m3u8_link}</a> : m3u8_link}</div></td>
-                  <td className={`m3u8-dl ${isURL ? 'valid-url' : ''}`}><img src={dl_image} onClick={() => { isURL ? download_m3u8(m3u8_link) : '' }} draggable="false"></img></td>
+                  <td className={`m3u8-dl ${m3u8bg[index] ? 'active' : 'inactive'} ${isURL ? 'valid-url' : ''}`}>
+                    <img src={dl_image} onClick={() => { isURL ? download_m3u8(m3u8_link, index) : '' }} draggable="false"></img>
+                  </td>
                 </tr>
               } catch (e) {
                 console.log('error in m3u8_item: ')
@@ -355,12 +422,14 @@ function App() {
           <tbody>
             {history.map((item) => {
               try {
-                const { file, progress, timestamp } = item;
+                const { file, progress, timestamp, status } = item;
 
                 const isURL = validator.isURL(file);
 
                 return <tr className='history-entry' style={{
-                  background: `linear-gradient(to right, rgba(0, 255, 0, 0.2) ${progress}%, transparent ${progress}%)`,
+                  background: (status === 'in-progress' || status === 'completed')
+                    ? `linear-gradient(to right, rgba(0, 255, 0, 0.1) ${progress}%, transparent ${progress}%)`
+                    : 'rgba(255,0,0,0.1)'
                 }}>
                   <td className='history-timestamp'><div className='timestamp-content'>{new Date(timestamp).toLocaleTimeString([], {
                     month: '2-digit',

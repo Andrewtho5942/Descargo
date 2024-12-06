@@ -303,6 +303,15 @@ h1 {
 .m3u8-dl {
   width: 20px;
   text-align: center;
+  transition: background-color 0.1s ease;
+}
+
+.m3u8-dl.active {
+  background-color:green;
+}
+
+.m3u8-dl.inactive {
+  background-color:transparent;
 }
 
 .m3u8-dl.valid-url {

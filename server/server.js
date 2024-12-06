@@ -5,6 +5,7 @@ const { exec, spawn } = require('child_process');
 const fs = require('fs-extra');
 const { google } = require('googleapis');
 const path = require('path');
+const axios = require('axios');
 
 const key = require('./keys/yt-dl-443015-d39da117fe4a.json');
 const downloadsPath = "C:\\Users\\andre\\Downloads\\streaming\\yt-downloads";
@@ -25,6 +26,10 @@ const PORT = 5000;
 app.use(cors());
 app.use(bodyParser.json());
 
+// send a message to every client
+function broadcastProgress(message) {
+  clients.forEach(client => client.write(`data: ${JSON.stringify(message)}\n\n`));
+}
 
 // function to get the most recently modified file in a folder
 function getMostRecentFile(dir) {
@@ -93,36 +98,85 @@ app.get('/progress', (req, res) => {
 
 // endpoint to handle download requests
 app.post('/download', (req, res) => {
-  const { url, format, gdrive } = req.body;
+  const { url, format, gdrive, timestamp } = req.body;
 
   if (!url) {
     return res.status(400).send({ error: 'YouTube URL is required.' });
   }
-  let command = `yt-dlp "${url}"`
 
+  // Construct yt-dlp command arguments
+  let args = [url];
+  console.log('format: '+format)
   if (format === 'mp4') {
-    command += ' -f \"bv+ba/b\" --merge-output-format mp4'
+    args.push('-f', 'bv+ba/b', '--merge-output-format', 'mp4');
   } else {
-    command += ' -f \"ba/b\" -f \"m4a\"'
+    args.push('-f', 'ba/b', '-f', 'm4a');
   }
 
-  // execute yt-dl command to download the youtube video
-  exec(command, (error, stdout, stderr) => {
-    if (error) {
-      console.error(`Error: ${stderr}`);
-      return res.status(500).send({ error: 'failure' });
+  console.log('spawning ytdlp')
+
+  // Initialize yt-dlp process
+  const ytDlpProcess = spawn('yt-dlp', args
+    , {
+      cwd: downloadsPath,
+      shell: true,
+    }
+  );
+  // Listen to yt-dlp stderr for progress updates
+  ytDlpProcess.stderr.on('data', (data) => {
+    const lines = data.toString().split('\n');
+
+    lines.forEach(line => {
+      console.log('stderr: ' + line)
+    });
+  });
+
+  // Listen to yt-dlp stdout for progress updates
+  ytDlpProcess.stdout.on('data', (data) => {
+    const lines = data.toString().split('\n');
+
+    lines.forEach(line => {
+      // Example yt-dlp progress line:
+      // [download]   1.2% of 10.00MiB at 1.00MiB/s ETA 00:09
+      const progressMatch = line.match(/\[download\]\s+(\d+(\.\d+)?)% of/);
+      if (progressMatch) {
+        const progressPercent = parseFloat(progressMatch[1]);
+        console.log('download progress: ' + progressPercent);
+
+        // Broadcast progress to clients with timestamp
+        const message = { progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp };
+        broadcastProgress(message)
+      }
+    });
+  });
+
+  ytDlpProcess.on('close', (code) => {
+    if (code !== 0) {
+      console.error(`error: yt-dlp exited with code ${code}`);
+      res.send({ message: 'failure', timestamp: timestamp });
+      broadcastProgress({ timestamp: timestamp, status: 'error' });
+      return;
     }
 
+    console.log(`yt-dlp completed successfully.`);
+    res.send({ message: 'success', timestamp: timestamp });
+
+    broadcastProgress({ timestamp: timestamp, progress: 100, status: 'completed' });
+
+    // upload to google drive if necessary
     if (gdrive) {
       let latestFilePath = getMostRecentFile(downloadsPath);
-      // process the video title without the extension and append the extension to it after...
       let fileName = processVideoTitle(path.basename(latestFilePath, path.extname(latestFilePath))) + path.extname(latestFilePath);
-      console.log('uploading ' + fileName)
-      uploadFile(latestFilePath, fileName)
+      console.log('Uploading', fileName);
+      uploadFile(latestFilePath, fileName);
     }
 
-    console.log(`Output: ${stdout}`);
-    res.send({ message: 'success', output: stdout });
+  });
+
+  ytDlpProcess.on('error', (error) => {
+    console.error(`Error executing yt-dlp: ${error.message}`);
+    res.send({ message: 'failure', timestamp: timestamp });
+    broadcastProgress({ timestamp: historyEntry.timestamp, status: 'error' });
   });
 });
 
@@ -147,15 +201,21 @@ function getTotalDuration(input) {
 app.post('/download_m3u8', async (req, res) => {
   const { link, timestamp } = req.body;
 
-  let output_name = ''
-  const dotIndex = link.indexOf('.');
-  if (dotIndex !== -1 && dotIndex < 35) {
-    output_name = link.substring(8, dotIndex);
-  } else {
-    output_name = link.substring(8, 35);
+  // download the m3u8 file locally first
+  const m3u8Response = await axios.get(link, { responseType: 'text' });
+  if(!m3u8Response) {
+    // notify clients of error
+    const message = { progress: 0, timestamp:timestamp, status: 'error' };
+    broadcastProgress(message)
+    return;
   }
-  output_name = output_name.replace('/', '');
-  const output_file = `C:/Users/andre/Downloads/streaming/other/${output_name}.mp4`
+  const m3u8Content = m3u8Response.data;
+  // Save the .m3u8 file locally
+  const m3u8LocalPath = `C:/Users/andre/Downloads/streaming/m3u8/${Date.parse(timestamp)}.m3u8`;
+  fs.writeFileSync(m3u8LocalPath, m3u8Content, 'utf8');
+
+
+  const output_file = `C:/Users/andre/Downloads/streaming/other/${Date.parse(timestamp)}.mp4`
 
   const totalDuration = await getTotalDuration(link);
   console.log('total duration (in seconds) of the file: ' + totalDuration)
@@ -166,7 +226,7 @@ app.post('/download_m3u8', async (req, res) => {
 
   const ffmpegProcess = spawn('ffmpeg', [
     '-protocol_whitelist', 'file,http,https,tcp,tls',
-    '-i', link,
+    '-i', m3u8LocalPath,
     '-c', 'copy',
     output_file,
     '-progress', 'pipe:1',
@@ -190,19 +250,12 @@ app.post('/download_m3u8', async (req, res) => {
 
           console.log(`Progress: ${progressPercentage.toFixed(2)}%`);
 
-          const message = `data: ${JSON.stringify({ progress: progressPercentage.toFixed(2), status: 'in-progress', file: link, timestamp:timestamp })}\n\n`;
-          clients.forEach(client => client.write(message));
-
-          // if complete, close all the client connections
-          if (progressPercentage == 100) {
-            clients.forEach(client => client.end());
-            clients = [];
-          }
+          const message = { progress: progressPercentage.toFixed(2), status: 'in-progress', file: link, timestamp: timestamp };
+          broadcastProgress(message)
         }
       }
     }
 
-    // Keep the last line (could be incomplete) for the next chunk
     progressData = lines[lines.length - 1];
   });
 
@@ -215,15 +268,10 @@ app.post('/download_m3u8', async (req, res) => {
     console.log(`ffmpeg exited with code ${code}`);
     if (code !== 0) {
       // notify clients of error
-      const message = `data: ${JSON.stringify({ progress: 0, status: 'error' })}\n\n`;
-      clients.forEach(client => client.write(message));
-
-      // close all client connections
-      clients.forEach(client => client.end());
-      clients = [];
+      const message = { progress: 0, timestamp:timestamp, status: 'error' };
+      broadcastProgress(message)
     }
   });
-  //res.send({ message: 'Folder opened successfully' });
 });
 
 
