@@ -39,6 +39,14 @@ h1 {
   top: 20px;
 }
 
+.disconnect {
+  width:30px;
+  height:40px;
+  position: absolute;
+  top:10px;
+  left:325px;
+}
+
 
 .link-input {
   width: 85%;
@@ -145,6 +153,10 @@ h1 {
   transition: background-color 0.3s ease;
 }
 
+.menu-btn.active {
+  background-color: green;
+}
+
 .menu-toggle {
   transition: transform 0.3s ease;
   margin-right: 8px;
@@ -174,18 +186,28 @@ h1 {
 
 .clear-open-toggle {
   font-size: medium;
-  margin: 0px 5px;
-  padding-bottom: 4px;
-  padding-left: 5px;
-  padding-right: 5px;
-  width: 40px;
+  margin: 0px 2px;
+  padding-bottom: 2px;
+  padding-left: 3px;
+  padding-right: 3px;
+  width:46px;
   cursor: pointer;
-  background-color: rgb(45, 45, 45);
   border-radius: 5px;
   border: 1px solid black;
   transition: background-color 0.3s ease;
 }
-
+.clear-open-toggle.open {
+  background-color: rgb(45, 45, 45);
+}
+.clear-open-toggle.clear {
+  background-color: rgb(70, 45, 45);
+}
+.clear-open-toggle.open:hover {
+  background-color: rgb(45, 55, 45);
+}
+.clear-open-toggle.clear:hover {
+  background-color: rgb(80, 45, 45);
+}
 
 .file-ops {
   color: rgb(40, 160, 60);
@@ -236,8 +258,7 @@ h1 {
 }
 
 .autofill-btn:hover,
-.menu-btn:hover,
-.clear-open-toggle:hover {
+.menu-btn:hover:not(.active) {
   background-color: rgb(45, 55, 45);
 }
 
@@ -293,11 +314,11 @@ h1 {
 }
 
 .m3u8-timestamp {
-  width: 65px;
+  width: 75px;
 }
 
 .m3u8-link {
-  width: 230px;
+  width: 220px;
 }
 
 .m3u8-dl {
@@ -325,7 +346,7 @@ h1 {
 
 /* history table */
 .history-entry {
-  color: lightgray;
+  color: rgb(180,180,180);
   width:100%;
 }
 

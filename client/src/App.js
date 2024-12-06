@@ -10,9 +10,10 @@ import xmark from './images/x.png';
 import checkmark from './images/check.png';
 import drive from './images/gd.png';
 import explorer from './images/fe.png';
+import disconnect from './images/disconnect.png'
 
 function App() {
-  const SERVER_PORT = 5000;
+  const SERVER_PORT = 5001;
   const gdriveFolderID = "17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q"
   const [link, setLink] = useState('');
   const [result, setResult] = useState('');
@@ -26,6 +27,9 @@ function App() {
   const [m3u8Links, setM3u8Links] = useState([]);
   const [history, setHistory] = useState([])
   const [m3u8bg, setM3u8bg] = useState([false, false, false])
+  const [menubtnbg, setmenubtnbg] = useState([false, false])
+  const [disconnectVisible, setDisconnectVisible] = useState([true, false])
+
   const historyRef = useRef(history);
   const linkRef = useRef(link);
   const videoFormatRef = useRef(videoFormat);
@@ -41,7 +45,7 @@ function App() {
     linkRef.current = link;
   }, [link]);
 
-  // reload m3u8 links and history from storage when loading the popup
+  // reload m3u8 links, history, and disconnect from storage when loading the popup
   useEffect(() => {
     // m3u8 links
     browser.storage.local.get('m3u8_links').then((result) => {
@@ -62,15 +66,23 @@ function App() {
     }).catch((error) => {
       console.error('Error retrieving history:', error);
     });
+    
+    // disconnect
+    browser.storage.local.get('disconnect').then((result) => {
+    console.log('retrieved disconnect:')
+    console.log(result.disconnect)
+      setDisconnectVisible((prevDisconnect) =>
+        [result.disconnect, prevDisconnect[1]]
+      );
+    }).catch((error) => {
+      console.error('Error retrieving history:', error);
+    });
   }, []);
 
   // update the links and history in real time by listening to storage changes
   useEffect(() => {
     console.log('mounting storage listener')
     function handleStorageChange(changes, area) {
-      console.log('storage change detected:')
-      console.log(changes);
-      console.log(area);
 
       // update the m3u8 links
       if (area === 'local' && changes.m3u8_links) {
@@ -81,8 +93,17 @@ function App() {
       // update the history
       if (area === 'local' && changes.history) {
         setHistory(changes.history.newValue || []);
-        console.log('updated history from storage:');
-        console.log(changes.history.newValue);
+        console.log('updated history from storage.');
+        //console.log(changes.history.newValue);
+      }
+
+      // update disconnect
+      if (area === 'local' && changes.disconnect) {
+        // set the first boolean to the value in storage, which is the state of the server
+        setDisconnectVisible((prevDisconnect) =>
+          [changes.disconnect.newValue || true, prevDisconnect[1]]
+        );
+        console.log('updated disconnect from storage.');
       }
     }
 
@@ -93,61 +114,28 @@ function App() {
     };
   }, []);
 
-  // listen to the server for progress updates on downloads
-  // useEffect(() => {
-  //   console.log('opening sse connection...')
-  //   // Start the SSE connection
-  //   const eventSource = new EventSource(`http://localhost:${SERVER_PORT}/progress`);
+  //listen to changes in disconnect status and if disconnected, blink the image on and off
+  useEffect(() => {
+    let interval;
 
-  //   eventSource.onmessage = (event) => {
-  //     const data = JSON.parse(event.data);
-  //     if (data.progress) {
-  //       console.log('progress update: ' + data.progress)
-  //       let progressFloat = parseFloat(data.progress);
+    if (disconnectVisible[0]) {
+      // Start blinking when disconnectVisible[0] is true
+      interval = setInterval(() => {
+        setDisconnectVisible((prevDisconnect) => [prevDisconnect[0], !prevDisconnect[1],]);
+      }, 500);
+    } else {
+      // Stop blinking and reset visibility
+      setDisconnectVisible((prevDisconnect) =>
+        [prevDisconnect[0], false]
+      );
+      if (interval) clearInterval(interval);
+    }
 
-  //       let newStatus = 'in-progress'
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [disconnectVisible[0]]);
 
-  //       if (data.progress == 100) {
-  //         console.log('download finished!');
-  //         newStatus = 'completed'
-  //       }
-
-  //       if (data.status === 'error') {
-  //         console.error('An error occurred during download');
-  //         newStatus = 'error'
-  //       }
-
-  //       eventSource.onerror = (err) => {
-  //         console.error('EventSource failed:', err);
-  //         newStatus = 'error'
-  //       };
-
-  //       const updatedHistory = historyRef.current.map(item => {
-  //         if (item.timestamp === data.timestamp) {
-  //           return { ...item, progress: progressFloat, status: newStatus };
-  //         }
-  //         return item;
-  //       });
-
-  //       if (history[0] !== updatedHistory[0]) {
-  //         setHistory(updatedHistory)
-  //       }
-
-  //       if (newStatus !== 'in-progress') {
-  //         browser.storage.local.set({ history: updatedHistory }).then(() => {
-  //           console.log('Stored updated history item');
-  //         });
-  //       }
-  //     };
-
-  //   }
-
-
-  //   // Clean up on component unmount
-  //   return () => {
-  //     eventSource.close();
-  //   };
-  // }, []);
 
   // listen to key presses for hotkeys
   useEffect(() => {
@@ -159,7 +147,7 @@ function App() {
 
 
   const addToHistory = (file, progress, timestamp, status) => {
-    let newHistory = history;
+    let newHistory = historyRef.current;
     newHistory.unshift({ file, progress, timestamp, status })
 
     if (newHistory.length > 12) {
@@ -187,12 +175,10 @@ function App() {
           setVideoFormat((prevVideoFormat) => !prevVideoFormat);
           break;
         case 'm':
-          setHistoryOpen(false);
-          setM3u8Open((prevM3u8Open) => !prevM3u8Open);
+          openMenu(true);
           break;
         case 'h':
-          setM3u8Open(false);
-          setHistoryOpen((prevHistoryOpen) => !prevHistoryOpen);
+          openMenu(false);
           break;
         case 'o':
           setOpenFiles((prevOpenFiles) => !prevOpenFiles);
@@ -206,6 +192,17 @@ function App() {
           break;
         default:
       }
+    }
+  }
+
+
+  const openMenu = (m3u8) => {
+    if (m3u8) {
+      setHistoryOpen(false);
+      setM3u8Open((prevM3u8Open) => !prevM3u8Open);
+    } else {
+      setM3u8Open(false);
+      setHistoryOpen((prevHistoryOpen) => !prevHistoryOpen);
     }
   }
 
@@ -244,12 +241,47 @@ function App() {
       axios.post(`http://localhost:${SERVER_PORT}/download_m3u8`, {
         link: link,
         timestamp: timestamp
+      }).then((result) => {
+        if (result.data.status === 'error') {
+          //update the history if it times out
+          browser.storage.local.get('history').then((result) => {
+            const updatedHistory = result.history.map(item => {
+              if (item.timestamp === timestamp) {
+                return { ...item, progress: 0, status: 'error' };
+              }
+              return item;
+            });
+
+            browser.storage.local.set({ history: updatedHistory })
+          });
+        }
       });
       addToHistory(link, 0, timestamp, 'in-progress');
     } catch (error) {
       console.error('Error:', error);
     }
   }
+
+  const stopDownload = (timestamp) => {
+    console.log('stopping download with timestamp ' + timestamp);
+
+    // stop the process on the server
+    try {
+      axios.post(`http://localhost:${SERVER_PORT}/stop_download`, {
+        timestamp: timestamp
+      }).then((result) => {
+        console.log('Stop Download response: ' + result.message);
+      });
+    } catch (error) {
+      console.error('Error:', error);
+    }
+
+    // update the history in local storage to delete that entry
+    browser.storage.local.set({ history: historyRef.current.filter(item => item.timestamp !== timestamp) }).then(() => {
+      console.log('removed download from history in storage')
+    });
+  }
+
 
   const updateLink = (e) => {
     let newText = e.target.value;
@@ -277,6 +309,9 @@ function App() {
         console.log('download response: ')
         console.log(response.data.message)
         setResult(response.data.message);
+      }).catch((e) => {
+        console.error('Error:', e);
+        setResult('failure');
       });
 
     } catch (error) {
@@ -288,11 +323,13 @@ function App() {
   };
 
   const clearFolder = (local) => {
+    setOpenFiles(true);
+
     let setBg = local ? setFileBg1 : setFileBg2
 
     try {
       axios.post(`http://localhost:${SERVER_PORT}/clear`, {
-        local: local
+        type: local ? 'local-downloads' : 'gdrive-downloads'
       }).then((response) => {
         let color = 'red'
         if (response.data.message === 'success') {
@@ -309,6 +346,54 @@ function App() {
     }
   }
 
+  const clearMenu = (m3u8) => {
+    setOpenFiles(true);
+
+    // update the background for the menu button when clicked
+    const index = m3u8 ? 0 : 1;
+    setmenubtnbg((prevbgs) => {
+      const newbgs = [...prevbgs];
+      newbgs[index] = true;
+      return newbgs
+    });
+    setTimeout(() => {
+      setmenubtnbg((prevbgs) => {
+        const newbgs = [...prevbgs];
+        newbgs[index] = false;
+        return newbgs
+      });
+    }, 200)
+
+    if (m3u8) {
+      // clear the m3u8 storage and the local m3u8 folder
+      browser.storage.local.remove('m3u8_links')
+      try {
+        axios.post(`http://localhost:${SERVER_PORT}/clear`, {
+          type: 'local-m3u8'
+        }).then((response) => {
+          if (response.data.message === 'success') {
+            console.log('successfully cleared m3u8 menu')
+          }
+        });
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    } else {
+      console.log('clearing history ---------')
+      // clear the history storage
+      browser.storage.local.remove('history')
+
+      try {
+        axios.post(`http://localhost:${SERVER_PORT}/kill_processes`, {
+        }).then((response) => {
+          console.log('done killing processes: ')
+          console.log(response)
+        });
+      } catch (error) {
+        console.error('Error:', error);
+      }
+    }
+  }
 
   const openFolder = (local) => {
     if (local) {
@@ -328,6 +413,7 @@ function App() {
 
   return (
     <div className="App" >
+      {(disconnectVisible[0] && disconnectVisible[1]) && <img src={disconnect} alt="disconnected" draggable='false' className='disconnect'></img>}
       <img src={download} alt="youtube" draggable="false" className="dl-img"></img>
       <span className="header">
         <h1>YT Downloader</h1>
@@ -367,13 +453,13 @@ function App() {
 
 
       <div className="bot-spanner">
-        <div className='menu-btn' onClick={() => { setHistoryOpen(false); setM3u8Open((prevM3u8Open) => !prevM3u8Open) }}><div className={`menu-toggle m3u8 ${m3u8Open ? 'active' : 'inactive'}`}>V</div>m3u8</div>
+        <div className={`menu-btn ${menubtnbg[0] ? 'active' : 'inactive'}`} onClick={() => { openFiles ? openMenu(true) : clearMenu(true) }}><div className={`menu-toggle m3u8 ${m3u8Open ? 'active' : 'inactive'}`}>V</div>m3u8</div>
         <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
-        <div className='menu-btn' onClick={() => { setM3u8Open(false); setHistoryOpen((prevHistoryOpen) => !prevHistoryOpen) }}><div className={`menu-toggle history ${historyOpen ? 'active' : 'inactive'}`}>V</div>history</div>
+        <div className={`menu-btn ${menubtnbg[1] ? 'active' : 'inactive'}`} onClick={() => { openFiles ? openMenu(false) : clearMenu(false) }}><div className={`menu-toggle history ${historyOpen ? 'active' : 'inactive'}`}>V</div>history</div>
         <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
 
         <div className='file-ops'>
-          <div className='clear-open-toggle' onClick={() => { setOpenFiles(!openFiles) }}>{openFiles ? 'open' : 'clear'}</div>
+          <div className={`clear-open-toggle ${openFiles ? 'open' : 'clear'}`} onClick={() => { setOpenFiles(!openFiles) }}>{openFiles ? 'OPEN' : 'CLEAR'}</div>
 
           <div className='file-btn-wrapper' style={{ '--bg-color': fileBg1 }}>
             <img src={explorer} onClick={() => { openFiles ? openFolder(true) : clearFolder(true) }} alt="explorer" className="file-btn" draggable="false"></img>
@@ -427,9 +513,12 @@ function App() {
                 const isURL = validator.isURL(file);
 
                 return <tr className='history-entry' style={{
-                  background: (status === 'in-progress' || status === 'completed')
-                    ? `linear-gradient(to right, rgba(0, 255, 0, 0.1) ${progress}%, transparent ${progress}%)`
-                    : 'rgba(255,0,0,0.1)'
+                  background: status === 'in-progress' ?
+                    `linear-gradient(to right, rgba(0, 255, 0, 0.1) ${progress}%, transparent ${progress}%)`
+                    : (status === 'completed' ?
+                      `linear-gradient(to right, rgba(0, 255, 0, 0.12) ${progress}%, transparent ${progress}%)`
+                      : 'rgba(255,0,0,0.08)'
+                    )
                 }}>
                   <td className='history-timestamp'><div className='timestamp-content'>{new Date(timestamp).toLocaleTimeString([], {
                     month: '2-digit',
@@ -438,7 +527,9 @@ function App() {
                     minute: '2-digit',
                     hour12: true,
                   })}</div></td>
-                  <td className='history-link'><div className='history-content'>{isURL ? <a href={file}>{file}</a> : file}</div></td>
+                  <td className='history-link'><div className='history-content'>
+                    {item.status === 'in-progress' && <>{`${progress}% - `}<button style={{ marginRight: '4px' }} onClick={() => { stopDownload(timestamp) }}>stop</button></>}{isURL ? <a href={file}>{file}</a> : file}
+                  </div></td>
                 </tr>
               } catch (e) {
                 console.log('error in history_item: ')
@@ -449,7 +540,7 @@ function App() {
           </tbody>
         </table>
       </div>
-    </div>
+    </div >
   );
 }
 

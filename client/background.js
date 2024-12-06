@@ -1,4 +1,4 @@
-const SERVER_PORT = 5000;
+const SERVER_PORT = 5001;
 
 function storeLink(link) {
     const timestamp = new Date().toISOString();
@@ -37,12 +37,17 @@ browser.webRequest.onBeforeRequest.addListener(
 );
 
 
-
 console.log('opening sse connection...')
 // Start the SSE connection
 const eventSource = new EventSource(`http://localhost:${SERVER_PORT}/progress`);
 
+
 eventSource.onmessage = (event) => {
+    console.log('RECEIVED MESSAGE')
+    //set disconnect to true
+    browser.storage.local.set({ disconnect: false }).then(() => {
+        console.log('set disconnect to false in local storage')
+    });
 
     const data = JSON.parse(event.data);
 
@@ -61,16 +66,21 @@ eventSource.onmessage = (event) => {
         }
 
         browser.storage.local.get('history').then((result) => {
-            const updatedHistory = result.history.map(item => {
-                if (item.timestamp === data.timestamp) {
-                    return { ...item, progress: data.progress, status: newStatus };
-                }
-                return item;
-            });
-    
-            browser.storage.local.set({ history: updatedHistory }).then(() => {
-                console.log('set new history to storage.');
-            });
+            if (result.history) {
+                const updatedHistory = result.history.map(item => {
+                    if (item.timestamp === data.timestamp) {
+                        return { ...item, progress: data.progress, status: newStatus };
+                    }
+                    return item;
+                });
+
+                browser.storage.local.set({ history: updatedHistory }).then(() => {
+                    //console.log('set new history to storage.');
+                });
+            } else {
+                console.log('err: no history')
+            }
+
         });
     };
 
@@ -78,18 +88,25 @@ eventSource.onmessage = (event) => {
 
 eventSource.onerror = (err) => {
     console.error('EventSource failed:', err);
+    //set disconnect to true
+    browser.storage.local.set({ disconnect: true }).then(() => {
+        console.log('set disconnect to true in local storage')
+    });
 
+
+    // set all of the status in-progress downloads to error
     browser.storage.local.get('history').then((result) => {
-        const updatedHistory = result.history.map(item => {
-            if (item.status === 'in-progress') {
-                return { ...item, progress: 0, status: 'error' };
-            }
-            return item;
-        });
-
-        browser.storage.local.set({ history: updatedHistory }).then(() => {
-            console.log('set new history to storage.');
-        });
+        if (result.history) {
+            const updatedHistory = result.history.map(item => {
+                if (item.status === 'in-progress') {
+                    return { ...item, progress: 0, status: 'error' };
+                }
+                return item;
+            });
+            browser.storage.local.set({ history: updatedHistory }).then(() => {
+                //console.log('set new history to storage.');
+            });
+        }
     });
 };
 

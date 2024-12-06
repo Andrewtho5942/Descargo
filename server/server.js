@@ -2,13 +2,19 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const { exec, spawn } = require('child_process');
+const kill = require('tree-kill');
 const fs = require('fs-extra');
 const { google } = require('googleapis');
 const path = require('path');
 const axios = require('axios');
 
 const key = require('./keys/yt-dl-443015-d39da117fe4a.json');
-const downloadsPath = "C:\\Users\\andre\\Downloads\\streaming\\yt-downloads";
+const streamingPath = "C:\\Users\\andre\\Downloads\\streaming"
+const downloadsPath = streamingPath + "\\downloads";
+const m3u8Path = streamingPath + "\\m3u8";
+
+let activeProcesses = {};
+
 const gdriveFolderID = "17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q";
 
 let clients = [];
@@ -20,7 +26,7 @@ const auth = new google.auth.GoogleAuth({
 const drive = google.drive({ version: 'v3', auth });
 
 const app = express();
-const PORT = 5000;
+const PORT = 5001;
 
 // middleware
 app.use(cors());
@@ -86,7 +92,7 @@ app.get('/progress', (req, res) => {
   res.setHeader('Connection', 'keep-alive');
 
   // send a comment to keep the connection alive and add client
-  res.write(': connected\n\n');
+  res.write(`data: ${JSON.stringify({ message: 'connected' })}\n\n`);
   clients.push(res);
 
   // remove the client when the connection is closed
@@ -98,6 +104,8 @@ app.get('/progress', (req, res) => {
 
 // endpoint to handle download requests
 app.post('/download', (req, res) => {
+  console.log('downloading file...');
+
   const { url, format, gdrive, timestamp } = req.body;
 
   if (!url) {
@@ -105,15 +113,16 @@ app.post('/download', (req, res) => {
   }
 
   // Construct yt-dlp command arguments
-  let args = [url];
-  console.log('format: '+format)
+  let args = [`"${url}"`];
+  console.log('format: ' + format)
   if (format === 'mp4') {
-    args.push('-f', 'bv+ba/b', '--merge-output-format', 'mp4');
+    args.push('-f', 'bv+ba/b', '--merge-output-format', 'mp4', '-o', downloadsPath + '\\\%(title)s.\%(ext)s');
   } else {
-    args.push('-f', 'ba/b', '-f', 'm4a');
+    args.push('-f', 'ba/b', '-f', 'm4a', '-o', downloadsPath + '\\\%(title)s.\%(ext)s');
   }
 
-  console.log('spawning ytdlp')
+  console.log('spawning ytdlp with args: ')
+  console.log(args)
 
   // Initialize yt-dlp process
   const ytDlpProcess = spawn('yt-dlp', args
@@ -122,7 +131,10 @@ app.post('/download', (req, res) => {
       shell: true,
     }
   );
-  // Listen to yt-dlp stderr for progress updates
+
+  activeProcesses[timestamp] = { process: ytDlpProcess }
+
+  // Listen to yt-dlp stderr for debugging
   ytDlpProcess.stderr.on('data', (data) => {
     const lines = data.toString().split('\n');
 
@@ -170,7 +182,7 @@ app.post('/download', (req, res) => {
       console.log('Uploading', fileName);
       uploadFile(latestFilePath, fileName);
     }
-
+    delete activeProcesses[timestamp];
   });
 
   ytDlpProcess.on('error', (error) => {
@@ -199,23 +211,37 @@ function getTotalDuration(input) {
 
 //download a m3u8 file
 app.post('/download_m3u8', async (req, res) => {
+  console.log('downloading m3u8 file...');
+
   const { link, timestamp } = req.body;
 
   // download the m3u8 file locally first
-  const m3u8Response = await axios.get(link, { responseType: 'text' });
-  if(!m3u8Response) {
-    // notify clients of error
-    const message = { progress: 0, timestamp:timestamp, status: 'error' };
-    broadcastProgress(message)
+  let m3u8Response = null;
+  try {
+    m3u8Response = await axios.get(link, { responseType: 'text', timeout: 10000 });
+    if (!m3u8Response) {
+      console.log('error getting m3u8: no response')
+      // notify clients of error
+      const message = { progress: 0, timestamp: timestamp, status: 'error' };
+      broadcastProgress(message)
+      res.send(message)
+      return;
+    }
+  } catch (e) {
+    console.log('error getting m3u8: ' + e.message)
+    const message = { progress: 0, timestamp: timestamp, status: 'error' };
+    broadcastProgress(message);
+    res.send(message)
     return;
   }
+
   const m3u8Content = m3u8Response.data;
   // Save the .m3u8 file locally
   const m3u8LocalPath = `C:/Users/andre/Downloads/streaming/m3u8/${Date.parse(timestamp)}.m3u8`;
   fs.writeFileSync(m3u8LocalPath, m3u8Content, 'utf8');
 
 
-  const output_file = `C:/Users/andre/Downloads/streaming/other/${Date.parse(timestamp)}.mp4`
+  const output_file = `C:/Users/andre/Downloads/streaming/downloads/${Date.parse(timestamp)}.mp4`
 
   const totalDuration = await getTotalDuration(link);
   console.log('total duration (in seconds) of the file: ' + totalDuration)
@@ -232,6 +258,8 @@ app.post('/download_m3u8', async (req, res) => {
     '-progress', 'pipe:1',
     '-nostats',
   ]);
+
+  activeProcesses[timestamp] = { process: ffmpegProcess }
 
   let progressData = '';
 
@@ -268,13 +296,59 @@ app.post('/download_m3u8', async (req, res) => {
     console.log(`ffmpeg exited with code ${code}`);
     if (code !== 0) {
       // notify clients of error
-      const message = { progress: 0, timestamp:timestamp, status: 'error' };
+      const message = { progress: 0, timestamp: timestamp, status: 'error' };
       broadcastProgress(message)
     }
+    delete activeProcesses[timestamp];
   });
 });
+// stop a specific download
+app.post('/stop_download', (req, res) => {
+  const { timestamp } = req.body;
 
+  const processItem = activeProcesses[timestamp];
 
+  if (processItem) {
+    const process = processItem.process;
+    // Kill the process
+    console.log('attempting to kill process ' + process.pid);
+    kill(process.pid, 'SIGKILL', (err) => {
+      if (err) {
+        console.error(`Failed to kill process ${process.pid}:`, err);
+        return res.status(500).send({ message: 'Error stopping download' });
+      }
+      console.log('KILLED PROCESS ------ ' + process.pid);
+
+      delete activeProcesses[timestamp];
+
+      res.send({ message: 'Success: Download stopped' });
+    });
+    // Clean up the reference
+  } else {
+    res.send({ message: 'ERROR: Download not found' });
+  }
+});
+
+app.post('/kill_processes', (req, res) => {
+  console.log('--- killing all active processes ---');
+
+  Object.values(activeProcesses).forEach(processInfo => {
+    console.log('Process:', processInfo);
+    // Access the process and perform actions
+    const process = processInfo.process;
+    console.log('attempting to kill process ' + process.pid);
+    kill(process.pid, 'SIGKILL', (err) => {
+      if (err) {
+        console.error(`Failed to kill process ${process.pid}:`, err);
+        return res.status(500).send({ message: 'Error stopping download' });
+      }
+      console.log('KILLED PROCESS ------ ' + process.pid);
+
+    });
+    activeProcesses = {};
+    res.send({ message: 'success' })
+  });
+});
 
 
 //open a folder
@@ -297,8 +371,8 @@ app.post('/open', (req, res) => {
 
 // clear a folder
 app.post('/clear', (req, res) => {
-  const { local } = req.body;
-  if (local) {
+  const { type } = req.body;
+  if (type === 'local-downloads') {
     // clear local downloads folder
     fs.emptyDir(downloadsPath)
       .then(() => {
@@ -309,7 +383,7 @@ app.post('/clear', (req, res) => {
         console.log("Error clearing local folder:", err);
         res.send({ message: 'error' });
       });
-  } else {
+  } else if (type === 'gdrive-downloads') {
     // clear gdrive downloads folder (only files that the bot uploaded)
     drive.files.list({
       q: `'${gdriveFolderID}' in parents and trashed = false`,
@@ -336,6 +410,19 @@ app.post('/clear', (req, res) => {
     }).catch(() => {
       res.send({ message: 'error' });
     });
+  } else if (type === 'local-m3u8') {
+    // clear local downloads folder
+    fs.emptyDir(m3u8Path)
+      .then(() => {
+        console.log('cleared m3u8 folder')
+        res.send({ message: 'success' });
+      })
+      .catch(err => {
+        console.log("Error clearing m3u8 folder:", err);
+        res.send({ message: 'error' });
+      });
+  } else {
+    console.log('clear folder: unknown type --> ' + type);
   }
 });
 
