@@ -83,6 +83,8 @@ function App() {
   useEffect(() => {
     console.log('mounting storage listener')
     function handleStorageChange(changes, area) {
+      console.log('storage changed: ')
+      console.log(changes)
 
       // update the m3u8 links
       if (area === 'local' && changes.m3u8_links) {
@@ -91,26 +93,35 @@ function App() {
       }
 
       // update the history
-      if (area === 'local' && changes.history) {
-        setHistory(changes.history.newValue || []);
+      if (area === 'local' && (changes.history || changes.historyUpdater)) {
+        //setHistory(changes.history.newValue || []);
+        browser.storage.local.get('history').then((result) => {
+          const history = result.history || [];
+          console.log('retrieved history:')
+          console.log(history);
+          setHistory(history);
+        }).catch((error) => {
+          console.error('Error retrieving history:', error);
+        });
         console.log('updated history from storage.');
-        //console.log(changes.history.newValue);
       }
 
       // update disconnect
       if (area === 'local' && changes.disconnect) {
         // set the first boolean to the value in storage, which is the state of the server
         setDisconnectVisible((prevDisconnect) =>
-          [changes.disconnect.newValue || true, prevDisconnect[1]]
+          [changes.disconnect.newValue, prevDisconnect[1]]
         );
         console.log('updated disconnect from storage.');
       }
     }
 
     browser.storage.onChanged.addListener(handleStorageChange);
+    console.log('Storage change listener added.');
 
     return () => {
       browser.storage.onChanged.removeListener(handleStorageChange);
+      console.log('Storage change listener removed.');
     };
   }, []);
 

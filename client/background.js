@@ -20,6 +20,9 @@ function storeLink(link) {
         console.error('Error storing link:', error);
     });
 }
+function truncateString(str, len) {
+    return str.length > len ? str.slice(0, len-3) + '...' : str;
+}
 
 function handleM3U8Request(details) {
     const url = details.url;
@@ -43,11 +46,15 @@ const eventSource = new EventSource(`http://localhost:${SERVER_PORT}/progress`);
 
 
 eventSource.onmessage = (event) => {
-    console.log('RECEIVED MESSAGE')
-    //set disconnect to true
-    browser.storage.local.set({ disconnect: false }).then(() => {
-        console.log('set disconnect to false in local storage')
+    //set disconnect to false if its true in storage
+    browser.storage.local.get('disconnect').then((result) => {
+        if (result.disconnect) {
+            browser.storage.local.set({ disconnect: false }).then(() => {
+                //console.log('set disconnect to false in local storage')
+            });
+        }
     });
+
 
     const data = JSON.parse(event.data);
 
@@ -57,6 +64,19 @@ eventSource.onmessage = (event) => {
 
         if (data.progress == 100) {
             console.log('download finished!');
+            if ((data.status === 'completed') && data.file.endsWith('.m3u8')) {
+                browser.notifications.create({
+                    type: 'basic',
+                    iconUrl: 'icons/icon-48.png',
+                    title: 'YT-Downloader: Finished',
+                    message: `Video Download of ${truncateString(data.file, 20)} Finished!`
+                }).then(() => {
+                    console.log('notification created successfully.')
+                }).catch((e) => {
+                    console.log('ERROR in notification: ' + e.message)
+                });
+            }
+
             newStatus = 'completed';
         }
 
@@ -71,10 +91,15 @@ eventSource.onmessage = (event) => {
                     if (item.timestamp === data.timestamp) {
                         return { ...item, progress: data.progress, status: newStatus };
                     }
-                    return item;
+                    return { ...item };
                 });
 
                 browser.storage.local.set({ history: updatedHistory }).then(() => {
+                    console.log('set new history to storage.');
+                }).catch((e) => {
+                    console.log('error setting progress update to storage: ' + e);
+                });
+                browser.storage.local.set({ historyUpdater: Date.now() }).then(() => {
                     //console.log('set new history to storage.');
                 });
             } else {
@@ -88,9 +113,13 @@ eventSource.onmessage = (event) => {
 
 eventSource.onerror = (err) => {
     console.error('EventSource failed:', err);
-    //set disconnect to true
-    browser.storage.local.set({ disconnect: true }).then(() => {
-        console.log('set disconnect to true in local storage')
+    //set disconnect to true if its false in storage
+    browser.storage.local.get('disconnect').then((result) => {
+        if (!result.disconnect) {
+            browser.storage.local.set({ disconnect: true }).then(() => {
+                console.log('set disconnect to true in local storage')
+            });
+        }
     });
 
 
@@ -104,6 +133,9 @@ eventSource.onerror = (err) => {
                 return item;
             });
             browser.storage.local.set({ history: updatedHistory }).then(() => {
+                //console.log('set new history to storage.');
+            });
+            browser.storage.local.set({ historyUpdater: Date.now() }).then(() => {
                 //console.log('set new history to storage.');
             });
         }

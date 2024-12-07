@@ -357,6 +357,18 @@ h1 {
   width:205px;
 }
 
+.history-content button {
+  background-color:rgb(134, 50, 50);
+  border-radius: 5px;
+  outline: none;
+  border: 1px solid black;
+  cursor:pointer;
+  font-weight: bold;
+}
+
+.history-content button:hover {
+  background-color:rgb(114, 50, 50);
+}
 /* Styles for the content inside the cells */
 .timestamp-content,
 .link-content,

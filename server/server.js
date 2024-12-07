@@ -298,7 +298,12 @@ app.post('/download_m3u8', async (req, res) => {
       // notify clients of error
       const message = { progress: 0, timestamp: timestamp, status: 'error' };
       broadcastProgress(message)
+    } else {
+      // download completed successfully
+      broadcastProgress({ timestamp: timestamp, file: link, progress: 100, status: 'completed' });
+
     }
+
     delete activeProcesses[timestamp];
   });
 });

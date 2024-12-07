@@ -1,26 +1,34 @@
 {
-    "manifest_version": 2,
-    "name": "YouTube Downloader",
-    "version": "1.1",
-    "description": "Download YouTube videos and other media using yt-dlp",
-    "permissions": [
-      "activeTab",
-      "storage",
-      "tabs",
-      "webRequest",
-      "webRequestBlocking",
-      "<all_urls>"
-    ],
-    "background": {
-      "scripts": ["background.js"]
-    },
-    "browser_action": {
-      "default_popup": "bundle/index.html",
-      "default_icon": "favicon.ico"
-    },
-    "browser_specific_settings": {
-      "gecko": {
-        "id": "andrewtho5942_yt_dl@gmail.com"
-      }
+  "manifest_version": 2,
+  "name": "YouTube Downloader",
+  "version": "2.1",
+  "description": "Download YouTube videos and other media using yt-dlp and ffmpeg",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs",
+    "webRequest",
+    "webRequestBlocking",
+    "notifications",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "browser_action": {
+    "default_popup": "bundle/index.html",
+    "default_icon": "favicon.ico"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "andrewtho5942_yt_dl@gmail.com"
     }
   }
+}
