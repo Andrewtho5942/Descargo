@@ -13,7 +13,7 @@ import explorer from './images/fe.png';
 import disconnect from './images/disconnect.png'
 
 function App() {
-  const SERVER_PORT = 5001;
+  const SERVER_PORT = 5000;
   const gdriveFolderID = "17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q"
   const [link, setLink] = useState('');
   const [result, setResult] = useState('');
@@ -66,11 +66,11 @@ function App() {
     }).catch((error) => {
       console.error('Error retrieving history:', error);
     });
-    
+
     // disconnect
     browser.storage.local.get('disconnect').then((result) => {
-    console.log('retrieved disconnect:')
-    console.log(result.disconnect)
+      console.log('retrieved disconnect:')
+      console.log(result.disconnect)
       setDisconnectVisible((prevDisconnect) =>
         [result.disconnect, prevDisconnect[1]]
       );
@@ -83,12 +83,12 @@ function App() {
   useEffect(() => {
     console.log('mounting storage listener')
     function handleStorageChange(changes, area) {
-      console.log('storage changed: ')
-      console.log(changes)
+      //console.log('storage changed: ')
+      //console.log(changes)
 
       // update the m3u8 links
       if (area === 'local' && changes.m3u8_links) {
-        console.log('updated m3u8 links from storage.')
+        //console.log('updated m3u8 links from storage.')
         setM3u8Links(changes.m3u8_links.newValue || []);
       }
 
@@ -97,13 +97,13 @@ function App() {
         //setHistory(changes.history.newValue || []);
         browser.storage.local.get('history').then((result) => {
           const history = result.history || [];
-          console.log('retrieved history:')
+          //console.log('retrieved history:')
           console.log(history);
           setHistory(history);
         }).catch((error) => {
           console.error('Error retrieving history:', error);
         });
-        console.log('updated history from storage.');
+        //console.log('updated history from storage.');
       }
 
       // update disconnect
@@ -157,9 +157,9 @@ function App() {
   }, [])
 
 
-  const addToHistory = (file, progress, timestamp, status) => {
+  const addToHistory = (file, title, progress, timestamp, status) => {
     let newHistory = historyRef.current;
-    newHistory.unshift({ file, progress, timestamp, status })
+    newHistory.unshift({ file, title, progress, timestamp, status })
 
     if (newHistory.length > 12) {
       newHistory = newHistory.slice(0, 12);
@@ -229,7 +229,7 @@ function App() {
       });
   }
 
-  const download_m3u8 = (link, index) => {
+  const download_m3u8 = (link, title, index) => {
     const timestamp = new Date().toISOString();
 
     // set the background to green
@@ -251,7 +251,8 @@ function App() {
     try {
       axios.post(`http://localhost:${SERVER_PORT}/download_m3u8`, {
         link: link,
-        timestamp: timestamp
+        timestamp: timestamp,
+        title: title
       }).then((result) => {
         if (result.data.status === 'error') {
           //update the history if it times out
@@ -267,7 +268,7 @@ function App() {
           });
         }
       });
-      addToHistory(link, 0, timestamp, 'in-progress');
+      addToHistory(link, title, 0, timestamp, 'in-progress');
     } catch (error) {
       console.error('Error:', error);
     }
@@ -291,6 +292,8 @@ function App() {
     browser.storage.local.set({ history: historyRef.current.filter(item => item.timestamp !== timestamp) }).then(() => {
       console.log('removed download from history in storage')
     });
+    browser.storage.local.set({ historyUpdater: Date.now() });
+
   }
 
 
@@ -298,6 +301,10 @@ function App() {
     let newText = e.target.value;
     console.log('updating link: ' + newText)
     setLink(newText);
+  };
+
+  const processVideoTitle = (title) => {
+    return title.replace(/(\[.*?\]|\(.*?\))/g, '').trim();
   };
 
   const submitLink = () => {
@@ -309,28 +316,39 @@ function App() {
 
     try {
       const timestamp = new Date().toISOString();
-      addToHistory(linkRef.current, 0, timestamp, 'in-progress')
+      const format = videoFormatRef.current ? 'mp4' : 'm4a';
 
-      axios.post(`http://localhost:${SERVER_PORT}/download`, {
-        url: linkRef.current,
-        format: videoFormatRef.current ? 'mp4' : 'm4a',
-        gdrive: gdrive,
-        timestamp: timestamp
+      //get the title of the youtube video
+      axios.post(`http://localhost:${SERVER_PORT}/get-title`, {
+        url: linkRef.current
       }).then((response) => {
-        console.log('download response: ')
-        console.log(response.data.message)
-        setResult(response.data.message);
-      }).catch((e) => {
-        console.error('Error:', e);
-        setResult('failure');
-      });
+        const title = response.data.title;
+        console.log('get title for video: ' + title);
 
+        addToHistory(response.data.link, processVideoTitle(title)+'.'+format, 0, timestamp, 'in-progress');
+        
+        axios.post(`http://localhost:${SERVER_PORT}/download`, {
+          url: response.data.link,
+          title: title,
+          format: format,
+          gdrive: gdrive,
+          timestamp: timestamp
+        }).then((response) => {
+          console.log('download response: ')
+          console.log(response.data.message)
+          setResult(response.data.message);
+        }).catch((e) => {
+          console.error('Error:', e);
+          setResult('failure');
+        });
+      });
     } catch (error) {
       console.error('Error:', error);
       setResult('failure');
     }
 
     setLink('');
+
   };
 
   const clearFolder = (local) => {
@@ -490,6 +508,7 @@ function App() {
 
                 const m3u8_link = item.link;
                 const timestamp = item.timestamp;
+                const m3u8_title = item.title;
 
                 const isURL = validator.isURL(m3u8_link);
                 const dl_image = isURL ? download : xmark;
@@ -499,9 +518,9 @@ function App() {
                     minute: '2-digit',
                     hour12: true,
                   })}</div></td>
-                  <td className='m3u8-link'><div className='link-content'>{isURL ? <a href={m3u8_link}>{m3u8_link}</a> : m3u8_link}</div></td>
+                  <td className='m3u8-link'><div className='link-content'>{m3u8_title + ': '}{isURL ? <a href={m3u8_link}>{m3u8_link}</a> : m3u8_link}</div></td>
                   <td className={`m3u8-dl ${m3u8bg[index] ? 'active' : 'inactive'} ${isURL ? 'valid-url' : ''}`}>
-                    <img src={dl_image} onClick={() => { isURL ? download_m3u8(m3u8_link, index) : '' }} draggable="false"></img>
+                    <img src={dl_image} onClick={() => { isURL ? download_m3u8(m3u8_link, m3u8_title, index) : '' }} draggable="false"></img>
                   </td>
                 </tr>
               } catch (e) {
@@ -519,7 +538,7 @@ function App() {
           <tbody>
             {history.map((item) => {
               try {
-                const { file, progress, timestamp, status } = item;
+                const { file, title, progress, timestamp, status } = item;
 
                 const isURL = validator.isURL(file);
 
@@ -539,7 +558,7 @@ function App() {
                     hour12: true,
                   })}</div></td>
                   <td className='history-link'><div className='history-content'>
-                    {item.status === 'in-progress' && <>{`${progress}% - `}<button style={{ marginRight: '4px' }} onClick={() => { stopDownload(timestamp) }}>stop</button></>}{isURL ? <a href={file}>{file}</a> : file}
+                    {item.status === 'in-progress' && <>{`${progress}% - `}<button style={{ marginRight: '4px' }} onClick={() => { stopDownload(timestamp) }}>stop</button></>}{title + ': '}{isURL ? <a href={file}>{file}</a> : file}
                   </div></td>
                 </tr>
               } catch (e) {

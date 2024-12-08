@@ -1,34 +1,44 @@
-const SERVER_PORT = 5001;
+const SERVER_PORT = 5000;
 
-function storeLink(link) {
+function storeLink(link, title) {
     const timestamp = new Date().toISOString();
     browser.storage.local.get('m3u8_links').then((result) => {
         let links = result.m3u8_links || [];
         if (!links.some(item => item.link === link)) {
             // Add the new link with its timestamp to the beginning of the array
-            links.unshift({ link, timestamp });
+            links.unshift({ link, timestamp, title });
             // Keep the links size to a max of 3
             if (links.length > 3) {
                 links = links.slice(0, 3);
             }
 
             browser.storage.local.set({ m3u8_links: links }).then(() => {
-                console.log('Stored link:', link);
+                console.log('Stored link for', title);
             });
         }
     }).catch((error) => {
         console.error('Error storing link:', error);
     });
 }
+
 function truncateString(str, len) {
-    return str.length > len ? str.slice(0, len-3) + '...' : str;
+    return str.length > len ? str.slice(0, len - 3) + '...' : str;
 }
 
 function handleM3U8Request(details) {
     const url = details.url;
+
     if (url.endsWith('.m3u8')) {
-        console.log('Detected .m3u8 request:', url);
-        storeLink(url)
+        const sourceURL = details.frameAncestors[0].url
+        const currentYear = new Date().getFullYear().toString();
+        const year_regex = new RegExp(`\\b${currentYear}\\b`, 'g');
+        console.log('sourceURL: '+sourceURL)
+
+        //get and process the source URL into just the title
+        const title = sourceURL.slice(sourceURL.lastIndexOf('/')+1).replace(/-\d+(\.\d+)?$/, '')
+        .replace(/(watch|free)/g,'').replace(year_regex,'').replace(/^-+|-+$/g, '');
+
+        storeLink(url, title)
     }
 }
 
@@ -50,7 +60,7 @@ eventSource.onmessage = (event) => {
     browser.storage.local.get('disconnect').then((result) => {
         if (result.disconnect) {
             browser.storage.local.set({ disconnect: false }).then(() => {
-                //console.log('set disconnect to false in local storage')
+                console.log('reconnected to server')
             });
         }
     });
@@ -69,7 +79,7 @@ eventSource.onmessage = (event) => {
                     type: 'basic',
                     iconUrl: 'icons/icon-48.png',
                     title: 'YT-Downloader: Finished',
-                    message: `Video Download of ${truncateString(data.file, 20)} Finished!`
+                    message: `Video Download of ${truncateString(data.title, 30)} Finished!`
                 }).then(() => {
                     console.log('notification created successfully.')
                 }).catch((e) => {
@@ -95,7 +105,7 @@ eventSource.onmessage = (event) => {
                 });
 
                 browser.storage.local.set({ history: updatedHistory }).then(() => {
-                    console.log('set new history to storage.');
+                    //console.log('set new history to storage.');
                 }).catch((e) => {
                     console.log('error setting progress update to storage: ' + e);
                 });
@@ -117,7 +127,7 @@ eventSource.onerror = (err) => {
     browser.storage.local.get('disconnect').then((result) => {
         if (!result.disconnect) {
             browser.storage.local.set({ disconnect: true }).then(() => {
-                console.log('set disconnect to true in local storage')
+                console.log('disconnected from server')
             });
         }
     });

@@ -26,7 +26,7 @@ const auth = new google.auth.GoogleAuth({
 const drive = google.drive({ version: 'v3', auth });
 
 const app = express();
-const PORT = 5001;
+const PORT = 5000;
 
 // middleware
 app.use(cors());
@@ -101,14 +101,40 @@ app.get('/progress', (req, res) => {
   });
 });
 
+app.post('/get-title', (req, res) => {
+  const { url } = req.body;
+
+  try {
+    // Command to get the title
+    exec(`yt-dlp --get-title "${url}"`, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Error: ${error.message}`);
+        return;
+      }
+      if (stderr) {
+        console.error(`stderr: ${stderr}`);
+        return;
+      }
+      const title = stdout.trim()
+      console.log('got title: ' + title)
+      res.send({ title: title, link: url });
+    });
+  } catch (e) {
+    console.log('error in get-title: ' + e.message)
+    res.send({ title: 'unknown', link: url });
+  }
+})
+
 
 // endpoint to handle download requests
 app.post('/download', (req, res) => {
   console.log('downloading file...');
 
-  const { url, format, gdrive, timestamp } = req.body;
+  const { url, title, format, gdrive, timestamp } = req.body;
+  console.log('download link: ' + url);
 
   if (!url) {
+    console.log('err - no URL!')
     return res.status(400).send({ error: 'YouTube URL is required.' });
   }
 
@@ -162,33 +188,48 @@ app.post('/download', (req, res) => {
     });
   });
 
-  ytDlpProcess.on('close', (code) => {
+  ytDlpProcess.on('close', async (code) => {
     if (code !== 0) {
       console.error(`error: yt-dlp exited with code ${code}`);
-      res.send({ message: 'failure', timestamp: timestamp });
-      broadcastProgress({ timestamp: timestamp, status: 'error' });
+      res.send({ message: 'failure', file: url, timestamp: timestamp });
+      broadcastProgress({ progress: 0, timestamp: timestamp, file: url, status: 'error' });
       return;
     }
 
-    console.log(`yt-dlp completed successfully.`);
-    res.send({ message: 'success', timestamp: timestamp });
+    //rename the file
 
-    broadcastProgress({ timestamp: timestamp, progress: 100, status: 'completed' });
+    let newFile = processVideoTitle(title) + '.' + format;
+    let newFilePath = downloadsPath + '\\' + newFile;
+    //let oldFilePath = getMostRecentFile(downloadsPath);
+    let oldFilePath = downloadsPath + '\\' + title + '.' + format;
+
+    try {
+      await fs.rename(oldFilePath, newFilePath);
+      console.log(`File renamed from ${oldFilePath} to ${newFilePath}`);
+    } catch (err) {
+      console.error('Error renaming file:', err);
+    }
 
     // upload to google drive if necessary
     if (gdrive) {
-      let latestFilePath = getMostRecentFile(downloadsPath);
-      let fileName = processVideoTitle(path.basename(latestFilePath, path.extname(latestFilePath))) + path.extname(latestFilePath);
-      console.log('Uploading', fileName);
-      uploadFile(latestFilePath, fileName);
+      console.log('Uploading to gdrive', newFile);
+      uploadFile(newFilePath, newFile);
     }
+
+    // send completion message to client and service worker
+    console.log(`yt-dlp completed successfully.`);
+    res.send({ message: 'success', file: url, timestamp: timestamp, fileName:newFile });
+
+    broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed' });
+
+
     delete activeProcesses[timestamp];
   });
 
   ytDlpProcess.on('error', (error) => {
     console.error(`Error executing yt-dlp: ${error.message}`);
     res.send({ message: 'failure', timestamp: timestamp });
-    broadcastProgress({ timestamp: historyEntry.timestamp, status: 'error' });
+    broadcastProgress({ progress: 0, timestamp: historyEntry.timestamp, file: url, status: 'error' });
   });
 });
 
@@ -213,7 +254,7 @@ function getTotalDuration(input) {
 app.post('/download_m3u8', async (req, res) => {
   console.log('downloading m3u8 file...');
 
-  const { link, timestamp } = req.body;
+  const { link, timestamp, title } = req.body;
 
   // download the m3u8 file locally first
   let m3u8Response = null;
@@ -222,14 +263,14 @@ app.post('/download_m3u8', async (req, res) => {
     if (!m3u8Response) {
       console.log('error getting m3u8: no response')
       // notify clients of error
-      const message = { progress: 0, timestamp: timestamp, status: 'error' };
+      const message = { progress: 0, timestamp: timestamp, file: link, status: 'error' };
       broadcastProgress(message)
       res.send(message)
       return;
     }
   } catch (e) {
     console.log('error getting m3u8: ' + e.message)
-    const message = { progress: 0, timestamp: timestamp, status: 'error' };
+    const message = { progress: 0, timestamp: timestamp, file: link, status: 'error' };
     broadcastProgress(message);
     res.send(message)
     return;
@@ -237,11 +278,11 @@ app.post('/download_m3u8', async (req, res) => {
 
   const m3u8Content = m3u8Response.data;
   // Save the .m3u8 file locally
-  const m3u8LocalPath = `C:/Users/andre/Downloads/streaming/m3u8/${Date.parse(timestamp)}.m3u8`;
+  const m3u8LocalPath = `C:/Users/andre/Downloads/streaming/m3u8/${title + '--' + Date.parse(timestamp)}.m3u8`;
   fs.writeFileSync(m3u8LocalPath, m3u8Content, 'utf8');
 
 
-  const output_file = `C:/Users/andre/Downloads/streaming/downloads/${Date.parse(timestamp)}.mp4`
+  const output_file = `C:/Users/andre/Downloads/streaming/downloads/${title + '--' + Date.parse(timestamp)}.mp4`
 
   const totalDuration = await getTotalDuration(link);
   console.log('total duration (in seconds) of the file: ' + totalDuration)
@@ -296,7 +337,7 @@ app.post('/download_m3u8', async (req, res) => {
     console.log(`ffmpeg exited with code ${code}`);
     if (code !== 0) {
       // notify clients of error
-      const message = { progress: 0, timestamp: timestamp, status: 'error' };
+      const message = { progress: 0, timestamp: timestamp, file: link, status: 'error' };
       broadcastProgress(message)
     } else {
       // download completed successfully
