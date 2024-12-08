@@ -7,6 +7,7 @@ const fs = require('fs-extra');
 const { google } = require('googleapis');
 const path = require('path');
 const axios = require('axios');
+const os = require('os');
 
 const key = require('./keys/yt-dl-443015-d39da117fe4a.json');
 const streamingPath = "C:\\Users\\andre\\Downloads\\streaming"
@@ -26,7 +27,7 @@ const auth = new google.auth.GoogleAuth({
 const drive = google.drive({ version: 'v3', auth });
 
 const app = express();
-const PORT = 5000;
+const PORT = 5001;
 
 // middleware
 app.use(cors());
@@ -197,7 +198,6 @@ app.post('/download', (req, res) => {
     }
 
     //rename the file
-
     let newFile = processVideoTitle(title) + '.' + format;
     let newFilePath = downloadsPath + '\\' + newFile;
     //let oldFilePath = getMostRecentFile(downloadsPath);
@@ -216,9 +216,10 @@ app.post('/download', (req, res) => {
       uploadFile(newFilePath, newFile);
     }
 
+
     // send completion message to client and service worker
     console.log(`yt-dlp completed successfully.`);
-    res.send({ message: 'success', file: url, timestamp: timestamp, fileName:newFile });
+    res.send({ message: 'success', file: url, timestamp: timestamp, fileName: newFile });
 
     broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed' });
 
@@ -290,12 +291,15 @@ app.post('/download_m3u8', async (req, res) => {
 
   //execute the ffmpeg command that will download and convert the m3u8 file to an mp4 file:
   //ffmpeg -protocol_whitelist "file,http,https,tcp,tls" -i "<m3u8_link>" -c copy <output_file>.mp4 -progress pipe:1 -nostats 
-
+  console.log('number of cores detected: '+ os.cpus().length)
   const ffmpegProcess = spawn('ffmpeg', [
     '-protocol_whitelist', 'file,http,https,tcp,tls',
     '-i', m3u8LocalPath,
-    '-c', 'copy',
+    '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11', // normalize audio
+    '-c:v', 'copy',  //copy video stream without re-encoding
+    '-c:a', 'aac',  // re-encode audio to aac
     output_file,
+    '-threads', `${os.cpus().length - 1}`,
     '-progress', 'pipe:1',
     '-nostats',
   ]);
