@@ -34,11 +34,11 @@ function handleM3U8Request(details) {
         const sourceURL = details.frameAncestors[0].url
         const currentYear = new Date().getFullYear().toString();
         const year_regex = new RegExp(`\\b${currentYear}\\b`, 'g');
-        console.log('sourceURL: '+sourceURL)
+        console.log('sourceURL: ' + sourceURL)
 
         //get and process the source URL into just the title
-        const title = sourceURL.slice(sourceURL.lastIndexOf('/')+1).replace(/-\d+(\.\d+)?$/, '')
-        .replace(/(watch|free)/g,'').replace(year_regex,'').replace(/^-+|-+$/g, '');
+        const title = sourceURL.slice(sourceURL.lastIndexOf('/') + 1).replace(/-\d+(\.\d+)?$/, '')
+            .replace(/(watch|free)/g, '').replace(year_regex, '').replace(/^-+|-+$/g, '');
 
         storeLink(url, title)
     }
@@ -101,7 +101,7 @@ eventSource.onmessage = (event) => {
             if (result.history) {
                 const updatedHistory = result.history.map(item => {
                     if (item.timestamp === data.timestamp) {
-                        return { ...item, progress: data.progress, status: newStatus };
+                        return { ...item, progress: data.progress, status: newStatus, title: data.title };
                     }
                     return { ...item };
                 });

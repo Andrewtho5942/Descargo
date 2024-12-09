@@ -303,9 +303,7 @@ function App() {
     setLink(newText);
   };
 
-  const processVideoTitle = (title) => {
-    return title.replace(/(\[.*?\]|\(.*?\))/g, '').trim();
-  };
+
 
   const submitLink = () => {
     setResult('loading');
@@ -318,29 +316,20 @@ function App() {
       const timestamp = new Date().toISOString();
       const format = videoFormatRef.current ? 'mp4' : 'm4a';
 
-      //get the title of the youtube video
-      axios.post(`http://localhost:${SERVER_PORT}/get-title`, {
-        url: linkRef.current
-      }).then((response) => {
-        const title = response.data.title;
-        console.log('get title for video: ' + title);
+      addToHistory(linkRef.current, 'fetching title...', 0, timestamp, 'in-progress');
 
-        addToHistory(response.data.link, processVideoTitle(title)+'.'+format, 0, timestamp, 'in-progress');
-        
-        axios.post(`http://localhost:${SERVER_PORT}/download`, {
-          url: response.data.link,
-          title: title,
-          format: format,
-          gdrive: gdrive,
-          timestamp: timestamp
-        }).then((response) => {
-          console.log('download response: ')
-          console.log(response.data.message)
-          setResult(response.data.message);
-        }).catch((e) => {
-          console.error('Error:', e);
-          setResult('failure');
-        });
+      axios.post(`http://localhost:${SERVER_PORT}/download`, {
+        url: linkRef.current,
+        format: format,
+        gdrive: gdrive,
+        timestamp: timestamp
+      }).then((response) => {
+        console.log('download response: ')
+        console.log(response.data.message)
+        setResult(response.data.message);
+      }).catch((e) => {
+        console.error('Error:', e);
+        setResult('failure');
       });
     } catch (error) {
       console.error('Error:', error);
