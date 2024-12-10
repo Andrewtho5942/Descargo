@@ -11,9 +11,10 @@ import checkmark from './images/check.png';
 import drive from './images/gd.png';
 import explorer from './images/fe.png';
 import disconnect from './images/disconnect.png'
+import settings from './images/settings.png'
 
 function App() {
-  const SERVER_PORT = 5001;
+  const SERVER_PORT = 5000;
   const gdriveFolderID = "17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q"
   const [link, setLink] = useState('');
   const [result, setResult] = useState('');
@@ -433,6 +434,7 @@ function App() {
     <div className="App" >
       {(disconnectVisible[0] && disconnectVisible[1]) && <img src={disconnect} alt="disconnected" draggable='false' className='disconnect'></img>}
       <img src={download} alt="youtube" draggable="false" className="dl-img"></img>
+      <img src={settings} alt="settings" draggable="false" className='settings-img' onClick={() => {browser.runtime.openOptionsPage()}}></img>
       <span className="header">
         <h1>YT Downloader</h1>
       </span>

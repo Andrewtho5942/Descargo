@@ -18,6 +18,7 @@
     "fs": "^0.0.1-security",
     "fs-extra": "^11.2.0",
     "googleapis": "^144.0.0",
+    "node-shazam": "^1.2.7",
     "tree-kill": "^1.2.2"
   }
 }

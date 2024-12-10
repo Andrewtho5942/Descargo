@@ -8,6 +8,8 @@ const { google } = require('googleapis');
 const path = require('path');
 const axios = require('axios');
 const os = require('os');
+const { Shazam } = require('node-shazam');
+const shazam = new Shazam();
 
 const key = require('./keys/yt-dl-443015-d39da117fe4a.json');
 const streamingPath = "C:\\Users\\andre\\Downloads\\streaming"
@@ -27,7 +29,7 @@ const auth = new google.auth.GoogleAuth({
 const drive = google.drive({ version: 'v3', auth });
 
 const app = express();
-const PORT = 5001;
+const PORT = 5000;
 
 // middleware
 app.use(cors());
@@ -39,27 +41,32 @@ function broadcastProgress(message) {
   clients.forEach(client => client.write(`data: ${JSON.stringify(message)}\n\n`));
 }
 
+shazam.recognise("C:\\Users\\andre\\Downloads\\streaming\\downloads\\Avenged Sevenfold - Hail To The King.m4a", 'en-US').then((result) => {
+  console.log('found song: '+result.track.subtitle + ' - '+result.track.title+' | link: '+result.track.url);
+});
+
+//"C:\\Users\\andre\\Downloads\\streaming\\downloads\\Avenged Sevenfold - Hail To The King.m4a" -> good
+//"C:\\Users\\andre\\Downloads\\streaming\\downloads\\Everything Stays _ Adventure Time.m4a" -> good
+//"C:\\Users\\andre\\Downloads\\streaming\\downloads\\Time Adventure-Adventure Time Finale Song Demo by Rebecca Sugar.m4a" -> null
 
 // function to get the most recently modified file in a folder
-function getMostRecentFile(dir) {
-  const files = fs.readdirSync(dir); // Read all files in the directory
-  let latestFile = null;
-  let latestTime = 0;
+// function getMostRecentFile(dir) {
+//   const files = fs.readdirSync(dir); // Read all files in the directory
+//   let latestFile = null;
+//   let latestTime = 0;
 
-  files.forEach((file) => {
-    const filePath = path.join(dir, file);
-    const stat = fs.statSync(filePath);
+//   files.forEach((file) => {
+//     const filePath = path.join(dir, file);
+//     const stat = fs.statSync(filePath);
 
-    if (stat.isFile() && stat.mtimeMs > latestTime) {
-      latestFile = filePath;
-      latestTime = stat.mtimeMs;
-    }
-  });
+//     if (stat.isFile() && stat.mtimeMs > latestTime) {
+//       latestFile = filePath;
+//       latestTime = stat.mtimeMs;
+//     }
+//   });
 
-  return latestFile;
-}
-
-
+//   return latestFile;
+// }
 
 // function to upload a file to google drive
 async function uploadFile(filePath, fileName) {
@@ -192,7 +199,7 @@ app.post('/download', async (req, res) => {
   // Construct yt-dlp command arguments
   let args = [`"${url}"`, '-o', `"${outputPath}"`];
   console.log('format: ' + format)
-  
+
   if (format === 'mp4') {
     args.push('-f', 'bv+ba/b', '--merge-output-format', 'mp4');
   } else {

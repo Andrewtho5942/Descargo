@@ -39,12 +39,30 @@ h1 {
   top: 20px;
 }
 
-.disconnect {
-  width:30px;
-  height:40px;
+.settings-img {
+  width: 22px;
+  height: 22px;
   position: absolute;
-  top:10px;
-  left:325px;
+  left: 15px;
+  top: 15px;
+  transition: transform 0.3s ease;
+  cursor: pointer;
+}
+
+.settings-img :not(:hover) {
+  transform: rotate(0deg);
+}
+
+.settings-img:hover {
+  transform: rotate(90deg);
+}
+
+.disconnect {
+  width: 30px;
+  height: 40px;
+  position: absolute;
+  top: 10px;
+  left: 325px;
 }
 
 
@@ -190,21 +208,25 @@ h1 {
   padding-bottom: 2px;
   padding-left: 3px;
   padding-right: 3px;
-  width:46px;
+  width: 46px;
   cursor: pointer;
   border-radius: 5px;
   border: 1px solid black;
   transition: background-color 0.3s ease;
 }
+
 .clear-open-toggle.open {
   background-color: rgb(45, 45, 45);
 }
+
 .clear-open-toggle.clear {
   background-color: rgb(70, 45, 45);
 }
+
 .clear-open-toggle.open:hover {
   background-color: rgb(45, 55, 45);
 }
+
 .clear-open-toggle.clear:hover {
   background-color: rgb(80, 45, 45);
 }
@@ -265,7 +287,7 @@ h1 {
 /* collapsible menus */
 .collapsible-menu {
   position: absolute;
-  transition: transform 0.4s ease;
+  transition: transform 0.3s ease;
   width: 100%;
   top: 70px;
   left: 0;
@@ -287,19 +309,25 @@ h1 {
 .open {
   transform: translateX(0);
 }
+
 /* m3u8 menu */
-.m3u8-table, .history-table{
+.m3u8-table,
+.history-table {
   margin: 5px 10px;
   border-collapse: collapse;
-  width: 300px; /* Set the table width */
-  table-layout: fixed; /* Ensures fixed table layout */
+  width: 300px;
+  /* Set the table width */
+  table-layout: fixed;
+  /* Ensures fixed table layout */
 }
 
-.m3u8-table td, .history-table td {
+.m3u8-table td,
+.history-table td {
   outline: 1px solid black;
   padding: 2px 5px;
   vertical-align: middle;
-  overflow: hidden; /* Hide overflow in td */
+  overflow: hidden;
+  /* Hide overflow in td */
 }
 
 .m3u8-entry {
@@ -328,11 +356,11 @@ h1 {
 }
 
 .m3u8-dl.active {
-  background-color:green;
+  background-color: green;
 }
 
 .m3u8-dl.inactive {
-  background-color:transparent;
+  background-color: transparent;
 }
 
 .m3u8-dl.valid-url {
@@ -346,29 +374,31 @@ h1 {
 
 /* history table */
 .history-entry {
-  color: rgb(180,180,180);
-  width:100%;
+  color: rgb(180, 180, 180);
+  width: 100%;
 }
 
 .history-timestamp {
-  width:120px;
+  width: 120px;
 }
+
 .history-link {
-  width:205px;
+  width: 205px;
 }
 
 .history-content button {
-  background-color:rgb(134, 50, 50);
+  background-color: rgb(134, 50, 50);
   border-radius: 5px;
   outline: none;
   border: 1px solid black;
-  cursor:pointer;
+  cursor: pointer;
   font-weight: bold;
 }
 
 .history-content button:hover {
-  background-color:rgb(114, 50, 50);
+  background-color: rgb(114, 50, 50);
 }
+
 /* Styles for the content inside the cells */
 .timestamp-content,
 .link-content,
@@ -384,8 +414,10 @@ h1 {
   display: none;
 }
 
-.timestamp-content, .link-content, .history-content {
-  scrollbar-width: none; 
+.timestamp-content,
+.link-content,
+.history-content {
+  scrollbar-width: none;
 }
 
 
