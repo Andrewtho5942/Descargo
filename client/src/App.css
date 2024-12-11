@@ -73,11 +73,22 @@ h1 {
   margin-bottom: 10px;
   background-color: rgb(35, 38, 40);
   background: rgb(35, 38, 40);
-  outline: 2px solid rgb(8, 79, 40);
+  /* outline: 2px solid rgb(8, 79, 40); */
+  box-shadow: 0 0 5px 2px rgba(40, 160, 60, 0.4); 
   border: none;
   color: white;
   margin-right: auto;
-  margin-left: 2px
+  margin-left: 2px;
+  transition: box-shadow 0.3s ease;
+}
+
+.link-input:focus {
+  border:none;
+  outline: 2px solid rgba(40, 160, 60, 0.5);
+  box-shadow: 0 0 10px 4px rgba(40, 160, 60, 0.4); 
+}
+.link-input::-moz-focus-inner {
+  border: 0; /* Removes extra focus styling in Firefox */
 }
 
 .inline-container {

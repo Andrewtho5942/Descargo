@@ -436,7 +436,7 @@ function App() {
       <img src={download} alt="youtube" draggable="false" className="dl-img"></img>
       <img src={settings} alt="settings" draggable="false" className='settings-img' onClick={() => {browser.runtime.openOptionsPage()}}></img>
       <span className="header">
-        <h1>YT Downloader</h1>
+        <h1>YT-Downloader</h1>
       </span>
 
       <input
