@@ -381,7 +381,7 @@ function App() {
         newbgs[index] = false;
         return newbgs
       });
-    }, 200)
+    }, 150)
 
     if (m3u8) {
       // clear the m3u8 storage and the local m3u8 folder
@@ -473,14 +473,14 @@ function App() {
 
 
       <div className="bot-spanner">
-        <div className={`menu-btn ${menubtnbg[0] ? 'active' : 'inactive'}`} onClick={() => { openFiles ? openMenu(true) : clearMenu(true) }}><div className={`menu-toggle m3u8 ${m3u8Open ? 'active' : 'inactive'}`}>V</div>m3u8</div>
+      <div className='file-ops'><div className={`clear-open-toggle ${openFiles ? 'open' : 'clear'}`} onClick={() => { setOpenFiles(!openFiles) }}>{openFiles ? 'OPEN' : 'CLEAR'}</div></div>
+      <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
+        <div className={`menu-btn ${menubtnbg[0] ? 'active' : 'inactive'}`} onClick={() => { openFiles ? openMenu(true) : clearMenu(true) }}><div className={`menu-toggle m3u8 ${m3u8Open ? 'active' : 'inactive'}`}>V</div>GET</div>
         <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
         <div className={`menu-btn ${menubtnbg[1] ? 'active' : 'inactive'}`} onClick={() => { openFiles ? openMenu(false) : clearMenu(false) }}><div className={`menu-toggle history ${historyOpen ? 'active' : 'inactive'}`}>V</div>history</div>
         <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
 
         <div className='file-ops'>
-          <div className={`clear-open-toggle ${openFiles ? 'open' : 'clear'}`} onClick={() => { setOpenFiles(!openFiles) }}>{openFiles ? 'OPEN' : 'CLEAR'}</div>
-
           <div className='file-btn-wrapper' style={{ '--bg-color': fileBg1 }}>
             <img src={explorer} onClick={() => { openFiles ? openFolder(true) : clearFolder(true) }} alt="explorer" className="file-btn" draggable="false"></img>
           </div>

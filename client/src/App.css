@@ -215,10 +215,8 @@ h1 {
 
 .clear-open-toggle {
   font-size: medium;
-  margin: 0px 2px;
-  padding-bottom: 2px;
-  padding-left: 3px;
-  padding-right: 3px;
+  margin: 0;
+  padding:2px 4px;
   width: 46px;
   cursor: pointer;
   border-radius: 5px;

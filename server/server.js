@@ -41,13 +41,10 @@ function broadcastProgress(message) {
   clients.forEach(client => client.write(`data: ${JSON.stringify(message)}\n\n`));
 }
 
-shazam.recognise("C:\\Users\\andre\\Downloads\\streaming\\downloads\\Avenged Sevenfold - Hail To The King.m4a", 'en-US').then((result) => {
-  console.log('found song: '+result.track.subtitle + ' - '+result.track.title+' | link: '+result.track.url);
-});
+// shazam.recognise("C:\\Users\\andre\\Downloads\\streaming\\downloads\\Avenged Sevenfold - Hail To The King.m4a", 'en-US').then((result) => {
+//   console.log('found song: '+result.track.subtitle + ' - '+result.track.title+' | link: '+result.track.url);
+// });
 
-//"C:\\Users\\andre\\Downloads\\streaming\\downloads\\Avenged Sevenfold - Hail To The King.m4a" -> good
-//"C:\\Users\\andre\\Downloads\\streaming\\downloads\\Everything Stays _ Adventure Time.m4a" -> good
-//"C:\\Users\\andre\\Downloads\\streaming\\downloads\\Time Adventure-Adventure Time Finale Song Demo by Rebecca Sugar.m4a" -> null
 
 // function to get the most recently modified file in a folder
 // function getMostRecentFile(dir) {
@@ -206,7 +203,7 @@ app.post('/download', async (req, res) => {
     args.push('-f', 'ba/b', '-f', 'm4a');
   }
 
-  console.log('spawning ytdlp with args: ')
+  console.log('spawning yt-dlp with args: ')
   console.log(args)
 
   // Initialize yt-dlp process
@@ -438,6 +435,7 @@ app.post('/stop_download', (req, res) => {
 
 app.post('/kill_processes', (req, res) => {
   console.log('--- killing all active processes ---');
+
 
   Object.values(activeProcesses).forEach(processInfo => {
     console.log('Process:', processInfo);
