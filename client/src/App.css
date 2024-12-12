@@ -84,11 +84,12 @@ h1 {
 
 .link-input:focus {
   border:none;
-  outline: 2px solid rgba(40, 160, 60, 0.5);
+  outline: 2px solid rgba(40, 160, 60, 0.4);
   box-shadow: 0 0 10px 4px rgba(40, 160, 60, 0.4); 
 }
+
 .link-input::-moz-focus-inner {
-  border: 0; /* Removes extra focus styling in Firefox */
+  border: 0;
 }
 
 .inline-container {
@@ -114,6 +115,10 @@ h1 {
 
 .download-btn:hover {
   background-color: rgb(18, 109, 50);
+}
+
+.download-btn::-moz-focus-inner {
+  border: 0; 
 }
 
 .result {

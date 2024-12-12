@@ -16,10 +16,8 @@ import settings from './images/settings.png'
 function App() {
   const SERVER_PORT = 5000;
   const gdriveFolderID = "17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q"
-  const [link, setLink] = useState('');
   const [result, setResult] = useState('');
-  const [videoFormat, setVideoFormat] = useState(false);
-  const [gdrive, setGdrive] = useState(true);
+  const [popupSettings, setPopupSettings] = useState([false, true, '']); // videoFormat, gdrive, link
   const [m3u8Open, setM3u8Open] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [fileBg1, setFileBg1] = useTimeoutState('transparent');
@@ -32,19 +30,27 @@ function App() {
   const [disconnectVisible, setDisconnectVisible] = useState([true, false])
 
   const historyRef = useRef(history);
-  const linkRef = useRef(link);
-  const videoFormatRef = useRef(videoFormat);
+  const linkRef = useRef(popupSettings[2]);
+  const videoFormatRef = useRef(popupSettings[0]);
 
   //update the useRefs
   useEffect(() => {
     historyRef.current = history;
   }, [history]);
   useEffect(() => {
-    videoFormatRef.current = videoFormat;
-  }, [videoFormat]);
+    videoFormatRef.current = popupSettings[0];
+  }, [popupSettings[0]]);
   useEffect(() => {
-    linkRef.current = link;
-  }, [link]);
+    linkRef.current = popupSettings[2];
+  }, [popupSettings[2]]);
+
+  const storePopupSettings = (newPopupSettings) => {
+    browser.storage.local.set({ popupSettings: newPopupSettings }).then(() => {
+      // console.log(`Stored updated popupSettings`);
+      // console.log(newPopupSettings)
+    });
+  }
+
 
   // reload m3u8 links, history, and disconnect from storage when loading the popup
   useEffect(() => {
@@ -76,7 +82,18 @@ function App() {
         [result.disconnect, prevDisconnect[1]]
       );
     }).catch((error) => {
-      console.error('Error retrieving history:', error);
+      console.error('Error retrieving Disconnect:', error);
+    });
+
+    // popup settings
+    browser.storage.local.get('popupSettings').then((result) => {
+      const newPopupSettings = result.popupSettings;
+      console.log('retrieved popupSettings:');
+      console.log(newPopupSettings);
+      setPopupSettings(newPopupSettings);
+
+    }).catch((error) => {
+      console.error('Error retrieving popupSettings:', error);
     });
   }, []);
 
@@ -181,15 +198,20 @@ function App() {
     } else if (!inputFocused) {
       switch (e.key) {
         case 'g':
-          setGdrive((prevGDrive) => !prevGDrive);
+          setPopupSettings((prevSettings) => {
+            storePopupSettings([prevSettings[0], !prevSettings[1], prevSettings[2]]);
+            return([prevSettings[0], !prevSettings[1], prevSettings[2]])
+          });
           break;
         case 'p':
-          setVideoFormat((prevVideoFormat) => !prevVideoFormat);
-          break;
-        case 'm':
+          setPopupSettings((prevSettings) => {
+            storePopupSettings([!prevSettings[0], prevSettings[1], prevSettings[2]]);
+            return([!prevSettings[0], prevSettings[1], prevSettings[2]])
+          });          break;
+        case 'n':
           openMenu(true);
           break;
-        case 'h':
+        case 'm':
           openMenu(false);
           break;
         case 'o':
@@ -223,7 +245,10 @@ function App() {
       .then(tabs => {
         const currentTab = tabs[0];
         console.log('current Tab: ' + currentTab.url);
-        setLink(currentTab.url);
+        setPopupSettings((prevSettings) => {
+          storePopupSettings([prevSettings[0], prevSettings[1], currentTab.url]);
+          return([prevSettings[0], prevSettings[1], currentTab.url]);
+        });
       })
       .catch(error => {
         console.error('Error:', error);
@@ -301,7 +326,10 @@ function App() {
   const updateLink = (e) => {
     let newText = e.target.value;
     console.log('updating link: ' + newText)
-    setLink(newText);
+    setPopupSettings((prevSettings) => {
+      storePopupSettings([prevSettings[0], prevSettings[1], newText]);
+      return([prevSettings[0], prevSettings[1], newText]);
+    })
   };
 
 
@@ -322,7 +350,7 @@ function App() {
       axios.post(`http://localhost:${SERVER_PORT}/download`, {
         url: linkRef.current,
         format: format,
-        gdrive: gdrive,
+        gdrive: popupSettings[1],
         timestamp: timestamp
       }).then((response) => {
         console.log('download response: ')
@@ -337,8 +365,10 @@ function App() {
       setResult('failure');
     }
 
-    setLink('');
-
+    setPopupSettings((prevSettings) => {
+      storePopupSettings([prevSettings[0], prevSettings[1], '']);
+      return([prevSettings[0], prevSettings[1], '']);
+    })
   };
 
   const clearFolder = (local) => {
@@ -434,14 +464,14 @@ function App() {
     <div className="App" >
       {(disconnectVisible[0] && disconnectVisible[1]) && <img src={disconnect} alt="disconnected" draggable='false' className='disconnect'></img>}
       <img src={download} alt="youtube" draggable="false" className="dl-img"></img>
-      <img src={settings} alt="settings" draggable="false" className='settings-img' onClick={() => {browser.runtime.openOptionsPage()}}></img>
+      <img src={settings} alt="settings" draggable="false" className='settings-img' onClick={() => { browser.runtime.openOptionsPage() }}></img>
       <span className="header">
         <h1>YT-Downloader</h1>
       </span>
 
       <input
         type="text"
-        value={link}
+        value={popupSettings[2]}
         onChange={(e) => { updateLink(e) }}
         placeholder="Enter YouTube URL"
         className="link-input"
@@ -450,8 +480,13 @@ function App() {
       <div className='autofill-btn' onClick={() => { autofillLink() }}>fill</div>
 
 
-      <label className={`format checkbox-container ${videoFormat ? 'active' : ''}`}>
-        <input type="checkbox" checked={videoFormat} onChange={() => { setVideoFormat((prevVideoFormat) => !prevVideoFormat) }} />
+      <label className={`format checkbox-container ${popupSettings[0] ? 'active' : ''}`}>
+        <input type="checkbox" checked={popupSettings[0]} onChange={() => {
+          setPopupSettings((prevSettings) => {
+            storePopupSettings([!prevSettings[0], prevSettings[1], prevSettings[2]]);
+            return([!prevSettings[0], prevSettings[1], prevSettings[2]]);
+          });
+        }} />
         <span className="custom-checkbox"></span>
         <span style={{ userSelect: 'none' }} className="checkbox-label">MP4?</span>
       </label>
@@ -465,16 +500,21 @@ function App() {
       }
 
 
-      <label className={`gdrive checkbox-container ${gdrive ? 'active' : ''}`}>
-        <input type="checkbox" checked={gdrive} onChange={() => { setGdrive((prevGdrive) => !prevGdrive) }} />
+      <label className={`gdrive checkbox-container ${popupSettings[1] ? 'active' : ''}`}>
+        <input type="checkbox" checked={popupSettings[1]} onChange={() => {
+          setPopupSettings((prevSettings) => {
+            storePopupSettings([prevSettings[0], !prevSettings[1], prevSettings[2]]);
+            return([prevSettings[0], !prevSettings[1], prevSettings[2]]);
+          });
+        }} />
         <span className="custom-checkbox"></span>
         <span style={{ userSelect: 'none' }} className="checkbox-label">Gdrive?</span>
       </label>
 
 
       <div className="bot-spanner">
-      <div className='file-ops'><div className={`clear-open-toggle ${openFiles ? 'open' : 'clear'}`} onClick={() => { setOpenFiles(!openFiles) }}>{openFiles ? 'OPEN' : 'CLEAR'}</div></div>
-      <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
+        <div className='file-ops'><div className={`clear-open-toggle ${openFiles ? 'open' : 'clear'}`} onClick={() => { setOpenFiles(!openFiles) }}>{openFiles ? 'OPEN' : 'CLEAR'}</div></div>
+        <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
         <div className={`menu-btn ${menubtnbg[0] ? 'active' : 'inactive'}`} onClick={() => { openFiles ? openMenu(true) : clearMenu(true) }}><div className={`menu-toggle m3u8 ${m3u8Open ? 'active' : 'inactive'}`}>V</div>GET</div>
         <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
         <div className={`menu-btn ${menubtnbg[1] ? 'active' : 'inactive'}`} onClick={() => { openFiles ? openMenu(false) : clearMenu(false) }}><div className={`menu-toggle history ${historyOpen ? 'active' : 'inactive'}`}>V</div>history</div>
@@ -491,8 +531,8 @@ function App() {
       </div>
 
       {/* Collapsible menus */}
-      <div className={`m3u8-menu collapsible-menu ${m3u8Open ? 'open' : 'closed'}`}>
-        <table className='m3u8-table'>
+      <div className={`m3u8-menu collapsible-menu ${m3u8Open ? 'open' : 'closed'}`} tabIndex="-1">
+        <table className='m3u8-table' tabIndex="-1">
           <tbody>
             {m3u8Links.map((item, index) => {
               try {
@@ -503,15 +543,15 @@ function App() {
 
                 const isURL = validator.isURL(m3u8_link);
                 const dl_image = isURL ? download : xmark;
-                return <tr className='m3u8-entry'>
-                  <td className='m3u8-timestamp'><div className='timestamp-content'>{new Date(timestamp).toLocaleTimeString([], {
+                return <tr className='m3u8-entry' tabIndex="-1">
+                  <td className='m3u8-timestamp' tabIndex="-1"><div className='timestamp-content' tabIndex="-1">{new Date(timestamp).toLocaleTimeString([], {
                     hour: 'numeric',
                     minute: '2-digit',
                     hour12: true,
                   })}</div></td>
-                  <td className='m3u8-link'><div className='link-content'>{m3u8_title + ': '}{isURL ? <a href={m3u8_link}>{m3u8_link}</a> : m3u8_link}</div></td>
-                  <td className={`m3u8-dl ${m3u8bg[index] ? 'active' : 'inactive'} ${isURL ? 'valid-url' : ''}`}>
-                    <img src={dl_image} onClick={() => { isURL ? download_m3u8(m3u8_link, m3u8_title, index) : '' }} draggable="false"></img>
+                  <td className='m3u8-link' tabIndex="-1"><div className='link-content' tabIndex="-1">{m3u8_title + ': '}{isURL ? <a href={m3u8_link}>{m3u8_link}</a> : m3u8_link}</div></td>
+                  <td className={`m3u8-dl ${m3u8bg[index] ? 'active' : 'inactive'} ${isURL ? 'valid-url' : ''}`} tabIndex="-1">
+                    <img src={dl_image} tabIndex="-1" onClick={() => { isURL ? download_m3u8(m3u8_link, m3u8_title, index) : '' }} draggable="false"></img>
                   </td>
                 </tr>
               } catch (e) {
@@ -524,8 +564,8 @@ function App() {
         </table>
       </div>
 
-      <div className={`history-menu collapsible-menu ${historyOpen ? 'open' : 'closed'}`}>
-        <table className='history-table'>
+      <div className={`history-menu collapsible-menu ${historyOpen ? 'open' : 'closed'}`} tabIndex="-1">
+        <table className='history-table' tabIndex="-1">
           <tbody>
             {history.map((item) => {
               try {
@@ -533,7 +573,7 @@ function App() {
 
                 const isURL = validator.isURL(file);
 
-                return <tr className='history-entry' style={{
+                return <tr className='history-entry' tabIndex="-1" style={{
                   background: status === 'in-progress' ?
                     `linear-gradient(to right, rgba(0, 255, 0, 0.1) ${progress}%, transparent ${progress}%)`
                     : (status === 'completed' ?
@@ -541,15 +581,15 @@ function App() {
                       : 'rgba(255,0,0,0.08)'
                     )
                 }}>
-                  <td className='history-timestamp'><div className='timestamp-content'>{new Date(timestamp).toLocaleTimeString([], {
+                  <td className='history-timestamp' tabIndex="-1"><div className='timestamp-content' tabIndex="-1">{new Date(timestamp).toLocaleTimeString([], {
                     month: '2-digit',
                     day: '2-digit',
                     hour: 'numeric',
                     minute: '2-digit',
                     hour12: true,
                   })}</div></td>
-                  <td className='history-link'><div className='history-content'>
-                    {item.status === 'in-progress' && <>{`${progress}% - `}<button style={{ marginRight: '4px' }} onClick={() => { stopDownload(timestamp) }}>stop</button></>}{title + ': '}{isURL ? <a href={file}>{file}</a> : file}
+                  <td className='history-link' tabIndex="-1"><div className='history-content' tabIndex="-1">
+                    {item.status === 'in-progress' && <>{`${progress}% - `}<button style={{ marginRight: '4px' }} tabIndex="-1" onClick={() => { stopDownload(timestamp) }}>stop</button></>}{title + ': '}{isURL ? <a href={file} tabIndex="-1">{file}</a> : file}
                   </div></td>
                 </tr>
               } catch (e) {
