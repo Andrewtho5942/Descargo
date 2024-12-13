@@ -252,8 +252,11 @@ app.post('/download', async (req, res) => {
     if (code !== 0) {
       console.error(`error: yt-dlp exited with code ${code}`);
       res.send({ message: 'failure', file: url, timestamp: timestamp });
-      broadcastProgress({ progress: 0, timestamp: timestamp, file: url, status: 'error', title: cleanedTitle });
+
+      const message = { progress: 0, status: 'error', file: url, timestamp: timestamp, title: cleanedTitle };
+      broadcastProgress(message);
       clearCache(cleanedTitle)
+      delete activeProcesses[timestamp];
       return;
     }
 
@@ -282,6 +285,7 @@ app.post('/download', async (req, res) => {
     console.error(`Error executing yt-dlp: ${error.message}`);
     res.send({ message: 'failure', timestamp: timestamp });
     broadcastProgress({ progress: 0, timestamp: historyEntry.timestamp, file: url, status: 'error', title: cleanedTitle });
+    delete activeProcesses[timestamp];
   });
 });
 
@@ -420,41 +424,87 @@ app.post('/stop_download', (req, res) => {
     const process = processItem.process;
     // Kill the process
     console.log('attempting to kill process ' + process.pid);
-    kill(process.pid, 'SIGINT', (err) => {
-      if (err) {
-        console.error(`Failed to kill process ${process.pid}:`, err);
-        return res.status(500).send({ message: 'Error stopping download' });
-      }
-      console.log('KILLED PROCESS ------ ' + process.pid);
+    try {
+      kill(process.pid, 'SIGINT', (err) => {
+        if (err) {
+          console.error(`Failed to kill process ${process.pid}:`, err);
+          return res.status(500).send({ message: 'Error stopping download' });
+        }
+        console.log('KILLED PROCESS ------ ' + process.pid);
 
-      delete activeProcesses[timestamp];
+        delete activeProcesses[timestamp];
 
-      res.send({ message: 'Success: Download stopped' });
-    });
+        res.send({ message: 'Success: Download stopped' });
+        return;
+      })
+    } catch (e) {
+      console.log('error when killing process: ' + e.message);
+    }
   } else {
     res.send({ message: 'ERROR: Download not found' });
   }
 });
 
-app.post('/kill_processes', (req, res) => {
+// app.post('/kill_processes', (req, res) => {
+//   console.log('--- killing all active processes ---');
+
+
+//   Object.values(activeProcesses).forEach(processInfo => {
+//     console.log('Process:', processInfo);
+//     // Access the process and perform actions
+//     const process = processInfo.process;
+//     console.log('attempting to kill process ' + process.pid);
+//     try {
+//       kill(process.pid, 'SIGINT', (err) => {
+//         if (err) {
+//           console.error(`Failed to kill process ${process.pid}:`, err);
+//           res.status(500).send({ message: 'Error stopping download' });
+//           return;
+//         }
+//         console.log('KILLED PROCESS ------ ' + process.pid);
+//       })
+//     } catch (e) {
+//       console.log('error when killing processes: ' + e.message)
+//       return;
+//     }
+//   });
+//   activeProcesses = {};
+//   res.send({ message: 'success' })
+// });
+
+app.post('/kill_processes', async (req, res) => {
   console.log('--- killing all active processes ---');
 
-
-  Object.values(activeProcesses).forEach(processInfo => {
-    console.log('Process:', processInfo);
-    // Access the process and perform actions
+  const killPromises = Object.values(activeProcesses).map(processInfo => {
     const process = processInfo.process;
-    console.log('attempting to kill process ' + process.pid);
-    kill(process.pid, 'SIGINT', (err) => {
-      if (err) {
-        console.error(`Failed to kill process ${process.pid}:`, err);
-        return res.status(500).send({ message: 'Error stopping download' });
+    console.log('Attempting to kill process ' + process.pid);
+
+    return new Promise((resolve, reject) => {
+      try {
+        kill(process.pid, 'SIGINT', (err) => {
+          if (err) {
+            console.error(`Failed to kill process ${process.pid}:`, err);
+            reject(err);
+          } else {
+            console.log('KILLED PROCESS ------ ' + process.pid);
+            resolve();
+          }
+        });
+      } catch (e) {
+        console.error('Error when killing processes:', e.message);
+        reject(e);
       }
-      console.log('KILLED PROCESS ------ ' + process.pid);
     });
-    activeProcesses = {};
-    res.send({ message: 'success' })
   });
+
+  try {
+    await Promise.all(killPromises);
+    activeProcesses = {};
+    res.send({ message: 'Success: All processes stopped' });
+  } catch (err) {
+    console.error('One or more processes failed to stop:', err);
+    res.send({ message: 'Error stopping some processes', error: err.message });
+  }
 });
 
 

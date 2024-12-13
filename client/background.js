@@ -69,8 +69,10 @@ eventSource.onmessage = (event) => {
 
 
     const data = JSON.parse(event.data);
+    console.log('recieved message: ')
+    console.log(data)
 
-    if (data.progress) {
+    if ((data.progress != null) && (data.progress != undefined)) {
         console.log('progress update: ' + data.progress)
         let newStatus = data.status;
 

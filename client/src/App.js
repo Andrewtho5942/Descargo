@@ -402,7 +402,7 @@ function App() {
       const timestamp = new Date().toISOString();
       const format = videoFormatRef.current ? 'mp4' : 'm4a';
 
-      addToHistory(linkRef.current, 'fetching title...', 0, timestamp, 'in-progress');
+      addToHistory(linkRef.current, 'fetching title... ', 0, timestamp, 'in-progress');
 
       axios.post(`http://localhost:${SERVER_PORT}/download`, {
         url: linkRef.current,
