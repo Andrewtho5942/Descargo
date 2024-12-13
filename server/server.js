@@ -29,7 +29,7 @@ const auth = new google.auth.GoogleAuth({
 const drive = google.drive({ version: 'v3', auth });
 
 const app = express();
-const PORT = 5000;
+const PORT = 5001;
 
 // middleware
 app.use(cors());
@@ -269,6 +269,9 @@ app.post('/download', async (req, res) => {
     console.log(`yt-dlp completed successfully.`);
     res.send({ message: 'success', file: url, timestamp: timestamp, fileName: newFile });
 
+    console.log('cleanedTitle: ')
+    console.log(cleanedTitle)
+
     broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed', title: cleanedTitle });
 
 
@@ -390,14 +393,14 @@ app.post('/download_m3u8', async (req, res) => {
     console.log(`ffmpeg exited with code ${code}`);
     if (code !== 0) {
       // notify clients of error
-      const message = { progress: 0, timestamp: timestamp, file: link, status: 'error' };
+      const message = { progress: 0, timestamp: timestamp, file: link, status: 'error', title: title };
       broadcastProgress(message)
 
       //clean up cached files
       clearCache(title)
     } else {
       // download completed successfully
-      broadcastProgress({ timestamp: timestamp, file: link, progress: 100, status: 'completed' });
+      broadcastProgress({ timestamp: timestamp, file: link, progress: 100, status: 'completed', title: title });
 
     }
 

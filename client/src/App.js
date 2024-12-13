@@ -11,11 +11,35 @@ import checkmark from './images/check.png';
 import drive from './images/gd.png';
 import explorer from './images/fe.png';
 import disconnect from './images/disconnect.png'
-import settings from './images/settings.png'
+import settingsIcon from './images/settings.png'
+
+const defaultSettings = [
+  { key: "m3u8Notifs", value: true },
+  { key: "m4aNotifs", value: false },
+  { key: "mp4Notifs", value: false },
+  { key: "AHKPath", value: '' },
+  { key: "darkMode", value: true },
+
+  { key: "downloadsPath", value: '' },
+  { key: "removeSubtext", value: true },
+  { key: "normalizeAudio", value: true },
+  { key: "playlistLink", value: '' },
+  { key: "useShazam", value: false },
+
+  { key: "formatHotkey", value: 'p' },
+  { key: "gdriveHotkey", value: 'g' },
+  { key: "getMenuHotkey", value: 'n' },
+  { key: "historyMenuHotkey", value: 'm' },
+  { key: "openClearHotkey", value: 'o' },
+  { key: "backHotkey", value: 'Backspace' },
+  { key: "autofillHotkey", value: 'f' },
+  { key: "settingsHotkey", value: 's' }
+]
+
 
 function App() {
-  const SERVER_PORT = 5000;
-  const gdriveFolderID = "17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q"
+  const SERVER_PORT = 5001;
+  const gdriveFolderID = "17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q";
   const [result, setResult] = useState('');
   const [popupSettings, setPopupSettings] = useState([false, true, '']); // videoFormat, gdrive, link
   const [m3u8Open, setM3u8Open] = useState(false);
@@ -24,14 +48,17 @@ function App() {
   const [fileBg2, setFileBg2] = useTimeoutState('transparent');
   const [openFiles, setOpenFiles] = useState(true);
   const [m3u8Links, setM3u8Links] = useState([]);
-  const [history, setHistory] = useState([])
-  const [m3u8bg, setM3u8bg] = useState([false, false, false])
-  const [menubtnbg, setmenubtnbg] = useState([false, false])
-  const [disconnectVisible, setDisconnectVisible] = useState([true, false])
+  const [history, setHistory] = useState([]);
+  const [m3u8bg, setM3u8bg] = useState([false, false, false]);
+  const [menubtnbg, setmenubtnbg] = useState([false, false]);
+  const [disconnectVisible, setDisconnectVisible] = useState([true, false]);
+  const [settings, setSettings] = useState([]);
+
 
   const historyRef = useRef(history);
   const linkRef = useRef(popupSettings[2]);
   const videoFormatRef = useRef(popupSettings[0]);
+  const settingsRef = useRef(settings);
 
   //update the useRefs
   useEffect(() => {
@@ -43,6 +70,9 @@ function App() {
   useEffect(() => {
     linkRef.current = popupSettings[2];
   }, [popupSettings[2]]);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
 
   const storePopupSettings = (newPopupSettings) => {
     browser.storage.local.set({ popupSettings: newPopupSettings }).then(() => {
@@ -90,10 +120,34 @@ function App() {
       const newPopupSettings = result.popupSettings;
       console.log('retrieved popupSettings:');
       console.log(newPopupSettings);
-      setPopupSettings(newPopupSettings);
+      if (newPopupSettings) {
+        setPopupSettings(newPopupSettings);
+      } else {
+        console.log('Warning -- did not find popup settings in local storage, using default values...')
+      }
 
     }).catch((error) => {
       console.error('Error retrieving popupSettings:', error);
+    });
+
+    // settings
+    browser.storage.local.get('settings').then((result) => {
+      let newSettings = result.settings;
+      console.log('retrieved Settings:');
+      console.log(newSettings);
+      if (!newSettings || (newSettings.length < defaultSettings.length)) {
+        console.log('Warning -- Settings length is invalid, using default settings...');
+        newSettings = defaultSettings;
+      }
+      setSettings(newSettings);
+
+      // set the dark or light mode
+      const darkMode = newSettings.find(s => s.key === 'darkMode')
+      console.log('darkmode: ' + darkMode.value)
+      document.documentElement.setAttribute('data-theme', darkMode.value ? 'dark' : 'light');
+
+    }).catch((error) => {
+      console.error('Error retrieving settings:', error);
     });
   }, []);
 
@@ -197,32 +251,35 @@ function App() {
       submitLink();
     } else if (!inputFocused) {
       switch (e.key) {
-        case 'g':
+        case settingsRef.current.find(s => s.key === 'gdriveHotkey')?.value:
           setPopupSettings((prevSettings) => {
             storePopupSettings([prevSettings[0], !prevSettings[1], prevSettings[2]]);
-            return([prevSettings[0], !prevSettings[1], prevSettings[2]])
+            return ([prevSettings[0], !prevSettings[1], prevSettings[2]])
           });
           break;
-        case 'p':
+        case settingsRef.current.find(s => s.key === 'formatHotkey')?.value:
           setPopupSettings((prevSettings) => {
             storePopupSettings([!prevSettings[0], prevSettings[1], prevSettings[2]]);
-            return([!prevSettings[0], prevSettings[1], prevSettings[2]])
-          });          break;
-        case 'n':
+            return ([!prevSettings[0], prevSettings[1], prevSettings[2]])
+          }); break;
+        case settingsRef.current.find(s => s.key === 'getMenuHotkey')?.value:
           openMenu(true);
           break;
-        case 'm':
+        case settingsRef.current.find(s => s.key === 'historyMenuHotkey')?.value:
           openMenu(false);
           break;
-        case 'o':
+        case settingsRef.current.find(s => s.key === 'openClearHotkey')?.value:
           setOpenFiles((prevOpenFiles) => !prevOpenFiles);
           break;
-        case 'Backspace':
+        case settingsRef.current.find(s => s.key === 'backHotkey')?.value:
           setHistoryOpen(false);
           setM3u8Open(false);
           break;
-        case 'f':
+        case settingsRef.current.find(s => s.key === 'autofillHotkey')?.value:
           autofillLink();
+          break;
+        case settingsRef.current.find(s => s.key === 'settingsHotkey')?.value:
+          browser.runtime.openOptionsPage();
           break;
         default:
       }
@@ -247,7 +304,7 @@ function App() {
         console.log('current Tab: ' + currentTab.url);
         setPopupSettings((prevSettings) => {
           storePopupSettings([prevSettings[0], prevSettings[1], currentTab.url]);
-          return([prevSettings[0], prevSettings[1], currentTab.url]);
+          return ([prevSettings[0], prevSettings[1], currentTab.url]);
         });
       })
       .catch(error => {
@@ -328,7 +385,7 @@ function App() {
     console.log('updating link: ' + newText)
     setPopupSettings((prevSettings) => {
       storePopupSettings([prevSettings[0], prevSettings[1], newText]);
-      return([prevSettings[0], prevSettings[1], newText]);
+      return ([prevSettings[0], prevSettings[1], newText]);
     })
   };
 
@@ -367,7 +424,7 @@ function App() {
 
     setPopupSettings((prevSettings) => {
       storePopupSettings([prevSettings[0], prevSettings[1], '']);
-      return([prevSettings[0], prevSettings[1], '']);
+      return ([prevSettings[0], prevSettings[1], '']);
     })
   };
 
@@ -382,7 +439,12 @@ function App() {
       }).then((response) => {
         let color = 'red'
         if (response.data.message === 'success') {
-          color = 'green'
+          let darkMode = settings.find(s => s.key === 'darkMode').value
+          if (darkMode) {
+            color = '#126d32';
+          } else {
+            color = '#a0eba0';
+          }
         }
         // update the background color
         setBg(color);
@@ -464,7 +526,7 @@ function App() {
     <div className="App" >
       {(disconnectVisible[0] && disconnectVisible[1]) && <img src={disconnect} alt="disconnected" draggable='false' className='disconnect'></img>}
       <img src={download} alt="youtube" draggable="false" className="dl-img"></img>
-      <img src={settings} alt="settings" draggable="false" className='settings-img' onClick={() => { browser.runtime.openOptionsPage() }}></img>
+      <img src={settingsIcon} alt="settings" draggable="false" className='settings-img' onClick={() => { browser.runtime.openOptionsPage() }}></img>
       <span className="header">
         <h1>YT-Downloader</h1>
       </span>
@@ -484,7 +546,7 @@ function App() {
         <input type="checkbox" checked={popupSettings[0]} onChange={() => {
           setPopupSettings((prevSettings) => {
             storePopupSettings([!prevSettings[0], prevSettings[1], prevSettings[2]]);
-            return([!prevSettings[0], prevSettings[1], prevSettings[2]]);
+            return ([!prevSettings[0], prevSettings[1], prevSettings[2]]);
           });
         }} />
         <span className="custom-checkbox"></span>
@@ -504,7 +566,7 @@ function App() {
         <input type="checkbox" checked={popupSettings[1]} onChange={() => {
           setPopupSettings((prevSettings) => {
             storePopupSettings([prevSettings[0], !prevSettings[1], prevSettings[2]]);
-            return([prevSettings[0], !prevSettings[1], prevSettings[2]]);
+            return ([prevSettings[0], !prevSettings[1], prevSettings[2]]);
           });
         }} />
         <span className="custom-checkbox"></span>
@@ -513,11 +575,11 @@ function App() {
 
 
       <div className="bot-spanner">
-        <div className='file-ops'><div className={`clear-open-toggle ${openFiles ? 'open' : 'clear'}`} onClick={() => { setOpenFiles(!openFiles) }}>{openFiles ? 'OPEN' : 'CLEAR'}</div></div>
+        <div className={`file-ops ${openFiles ? 'open' : 'clear'}`} onClick={() => { setOpenFiles(!openFiles) }}><div className={`clear-open-toggle`}>{openFiles ? 'OPEN' : 'CLEAR'}</div></div>
         <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
         <div className={`menu-btn ${menubtnbg[0] ? 'active' : 'inactive'}`} onClick={() => { openFiles ? openMenu(true) : clearMenu(true) }}><div className={`menu-toggle m3u8 ${m3u8Open ? 'active' : 'inactive'}`}>V</div>GET</div>
         <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
-        <div className={`menu-btn ${menubtnbg[1] ? 'active' : 'inactive'}`} onClick={() => { openFiles ? openMenu(false) : clearMenu(false) }}><div className={`menu-toggle history ${historyOpen ? 'active' : 'inactive'}`}>V</div>history</div>
+        <div className={`menu-btn ${menubtnbg[1] ? 'active' : 'inactive'}`} onClick={() => { openFiles ? openMenu(false) : clearMenu(false) }}><div className={`menu-toggle history ${historyOpen ? 'active' : 'inactive'}`}>V</div>History</div>
         <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
 
         <div className='file-ops'>
@@ -560,6 +622,7 @@ function App() {
               }
             })
             }
+            {(m3u8Links.length === 0) && <div className='menu-empty'> No m3u8 links detected from GET requests! </div>}
           </tbody>
         </table>
       </div>
@@ -599,6 +662,8 @@ function App() {
             })
             }
           </tbody>
+          {(history.length === 0) && <div className='menu-empty'> No history found! </div>}
+
         </table>
       </div>
     </div >

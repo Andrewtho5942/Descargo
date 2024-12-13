@@ -1,6 +1,6 @@
 
 
-const SERVER_PORT = 5000;
+const SERVER_PORT = 5001;
 
 function storeLink(link, title) {
     const timestamp = new Date().toISOString();
@@ -74,9 +74,12 @@ eventSource.onmessage = (event) => {
         console.log('progress update: ' + data.progress)
         let newStatus = data.status;
 
+        console.log('data:')
+        console.log(data)
+
         if (data.progress == 100) {
-            console.log('download finished!');
             if ((data.status === 'completed') && data.file.endsWith('.m3u8')) {
+                console.log('download finished!');
                 browser.notifications.create({
                     type: 'basic',
                     iconUrl: 'icons/icon-48.png',
