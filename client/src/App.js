@@ -38,7 +38,10 @@ const defaultSettings = [
 
 
 function App() {
+  const ISLOCAL = false;
   const SERVER_PORT = 5001;
+  const serverURL = ISLOCAL ? `http://localhost:${SERVER_PORT}` : "https://3a51-156-146-107-197.ngrok-free.app";
+
   const gdriveFolderID = "17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q";
   const [result, setResult] = useState('');
   const [popupSettings, setPopupSettings] = useState([false, true, '']); // videoFormat, gdrive, link
@@ -332,7 +335,10 @@ function App() {
 
     console.log('downloading ' + link + '...');
     try {
-      axios.post(`http://localhost:${SERVER_PORT}/download_m3u8`, {
+      axios.post(`${serverURL}/download_m3u8`, {
+        headers: {
+          'ngrok-skip-browser-warning': '1'
+        },
         link: link,
         timestamp: timestamp,
         title: title
@@ -362,7 +368,10 @@ function App() {
 
     // stop the process on the server
     try {
-      axios.post(`http://localhost:${SERVER_PORT}/stop_download`, {
+      axios.post(`${serverURL}/stop_download`, {
+        headers: {
+          'ngrok-skip-browser-warning': '1'
+        },
         timestamp: timestamp
       }).then((result) => {
         console.log('Stop Download response: ' + result.message);
@@ -404,7 +413,10 @@ function App() {
 
       addToHistory(linkRef.current, 'fetching title... ', 0, timestamp, 'in-progress');
 
-      axios.post(`http://localhost:${SERVER_PORT}/download`, {
+      axios.post(`${serverURL}/download`, {
+        headers: {
+          'ngrok-skip-browser-warning': '1'
+        },
         url: linkRef.current,
         format: format,
         gdrive: popupSettings[1],
@@ -434,7 +446,10 @@ function App() {
     let setBg = local ? setFileBg1 : setFileBg2
 
     try {
-      axios.post(`http://localhost:${SERVER_PORT}/clear`, {
+      axios.post(`${serverURL}/clear`, {
+        headers: {
+          'ngrok-skip-browser-warning': '1'
+        },
         type: local ? 'local-downloads' : 'gdrive-downloads'
       }).then((response) => {
         let color = 'red'
@@ -479,7 +494,10 @@ function App() {
       // clear the m3u8 storage and the local m3u8 folder
       browser.storage.local.remove('m3u8_links')
       try {
-        axios.post(`http://localhost:${SERVER_PORT}/clear`, {
+        axios.post(`${serverURL}/clear`, {
+          headers: {
+            'ngrok-skip-browser-warning': '1'
+          },
           type: 'local-m3u8'
         }).then((response) => {
           if (response.data.message === 'success') {
@@ -495,7 +513,10 @@ function App() {
       browser.storage.local.remove('history')
 
       try {
-        axios.post(`http://localhost:${SERVER_PORT}/kill_processes`, {
+        axios.post(`${serverURL}/kill_processes`, {
+          headers: {
+            'ngrok-skip-browser-warning': '1'
+          },
         }).then((response) => {
           console.log('done killing processes: ')
           console.log(response)
@@ -510,7 +531,12 @@ function App() {
     if (local) {
       // open file explorer to downloads folder
       try {
-        axios.post(`http://localhost:${SERVER_PORT}/open`, {}).then((response) => {
+        axios.post(`${serverURL}/open`, {
+          headers: {
+            'ngrok-skip-browser-warning': '1'
+          },
+        }).then((response) => {
+
           console.log(response.data.message)
         });
       } catch (error) {

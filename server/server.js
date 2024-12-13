@@ -41,6 +41,11 @@ function broadcastProgress(message) {
   clients.forEach(client => client.write(`data: ${JSON.stringify(message)}\n\n`));
 }
 
+app.get('/', (req, res) => {
+  console.log('connection detected');
+  res.send('hello, world!');
+})
+
 // shazam.recognise("C:\\Users\\andre\\Downloads\\streaming\\downloads\\Avenged Sevenfold - Hail To The King.m4a", 'en-US').then((result) => {
 //   console.log('found song: '+result.track.subtitle + ' - '+result.track.title+' | link: '+result.track.url);
 // });
