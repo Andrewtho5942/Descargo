@@ -38,9 +38,9 @@ const defaultSettings = [
 
 
 function App() {
-  
-  const ISLOCAL = false;
-  const SERVER_PORT = 5001;
+
+  const ISLOCAL = true;
+  const SERVER_PORT = 5000;
   const serverURL = ISLOCAL ? `http://localhost:${SERVER_PORT}` : "https://3a51-156-146-107-197.ngrok-free.app";
 
   const gdriveFolderID = "17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q";
