@@ -36,6 +36,10 @@ function setInputValues() {
       if (settings[i].key === 'darkMode') {
         document.documentElement.setAttribute('data-theme', settings[i].value ? 'dark' : 'light')
       }
+    } else if (input.classList.contains('text-input')) {
+      console.log('loading from storage:')
+      console.log(settings[i].value)
+      input.value = settings[i].value;
     }
   }
 
@@ -106,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (classes.contains('hotkey')) {
 
 
-      const handleKeyDown = (e) => handleKeyPress(e, i)
+      const handleKeyDown = (e) => handleKeyPress(e, i);
 
 
       function handleKeyPress(event, i) {
@@ -179,9 +183,43 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         }
       });
+    } else if (classes.contains('text-input')) {
+      console.log('adding onchange listener...')
+      input.addEventListener('input', (event) => {
+        const newValue = event.target.value;
+        settings[i].value = newValue;
+
+        storage.set({ ['settings']: settings });
+        console.log(`Saved new value for ` + settings[i].key + `: ${newValue}`);
+      });
     }
+
   }
 
+  // add submit listeners for playlist-input
+  const playlistForm = document.getElementById('playlist-form');
+  const playlistInput = document.getElementById('playlist-input');
+  const playlistBtn = document.getElementById('playlist-btn');
+
+  function handleStartPlaylist(event) {
+    event.preventDefault();
+
+
+    console.log('starting playlist download: '+playlistInput.value);
+
+
+    playlistInput.value='';
+    settings.find(s=>s.key==='playlistLink').value = '';
+    storage.set({ ['settings']: settings });
+
+  }
+
+  if (playlistForm) {
+    playlistForm.addEventListener('submit', handleStartPlaylist)
+  }
+  if (playlistBtn) {
+    playlistBtn.addEventListener('click', handleStartPlaylist)
+  }
 });
 
 

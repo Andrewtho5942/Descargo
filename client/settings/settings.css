@@ -21,7 +21,7 @@
     --slider-bg: rgb(41, 42, 45);
     --slider-btn: rgb(22, 23, 26);
 
-    --hotkey-active:rgb(25, 115, 24);
+    --hotkey-active: rgb(25, 115, 24);
 }
 
 [data-theme='light'] {
@@ -45,7 +45,7 @@
     --slider-bg: #ccc;
     --slider-btn: white;
 
-    --hotkey-active:rgb(75, 185, 44);
+    --hotkey-active: rgb(75, 185, 44);
 }
 
 body {
@@ -176,6 +176,37 @@ body {
     border: 0;
 }
 
+
+#playlist-form {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width:100%;
+}
+
+#playlist-input {
+    flex: 1;
+    margin-right:0px;
+    margin-left:0px;
+    width:calc(100% - 120px);
+}
+
+#playlist-btn {
+    width: auto;
+    font-size: 1.2rem;
+    background-color: var(--container-bg);
+    color: var(--text-color-mute);
+    cursor: pointer;
+    padding:4px 8px;
+    border-radius: 5px;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    box-shadow: 0 0 4px 2px var(--theme-color-transparent);
+}
+
+#playlist-btn:hover {
+    background-color: var(--container-bg-hover);
+}
+
 /* hotkeys */
 
 .hotkey {
@@ -253,8 +284,6 @@ input:focus+.slider {
 }
 
 input:checked+.slider:before {
-    -webkit-transform: translateX(55px);
-    -ms-transform: translateX(55px);
     transform: translateX(55px);
 }
 

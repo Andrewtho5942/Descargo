@@ -36,7 +36,7 @@
     </div>
     <div class="grid-item large">
       AutoHotkey Script Path
-      <input type="text" placeholder="/path/to/your/focusExplorer.ahk" class="text-input"></input>
+      <input type="text" placeholder="/path/to/your/focusExplorer.ahk" class="text-input" autocomplete="off"></input>
     </div>
     <div class="grid-item">
       Dark Theme
@@ -52,7 +52,7 @@
     <span class="label">Downloads</span>
     <div class="grid-item large">
       Downloads Folder Path
-      <input type="text" placeholder="/path/to/your/downloads/" class="text-input"></input>
+      <input type="text" placeholder="/path/to/your/downloads/" class="text-input" autocomplete="off"></input>
     </div>
     <div class="grid-item">
       Remove Subtext
@@ -69,8 +69,11 @@
       </label>
     </div>
     <div class="grid-item large">
-      Playlist Link
-      <input type="text" placeholder="https://your-playlist.youtube.com" class="text-input"></input>
+      Playlist Link / Start Download
+      <form id="playlist-form">
+        <input type="text" placeholder="https://your-playlist.youtube.com" class="text-input" id="playlist-input" autocomplete="off">
+        <div id="playlist-btn">Start</div>
+      </form>
     </div>
     <div class="grid-item">
       Rename w/ Shazam
@@ -100,7 +103,7 @@
     </div>
     <div class="grid-item">
       Open GET Menu
-      <label class="hotkey-label" >
+      <label class="hotkey-label">
         <input type="checkbox" class="hotkey"></input>
         <div class="hotkey-text"></div>
       </label>
