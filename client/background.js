@@ -108,24 +108,27 @@ eventSource.onmessage = (event) => {
 
         if (data.status === 'error') {
             console.error('An error occurred during download');
+            browser.storage.local.get('settings').then((result) => {
+                console.log('pulled settings: ');
+                console.log(result.settings)
 
-            if ((result.settings.find(s => s.key === 'm3u8Notifs').value && data.fileName.endsWith('.m3u8')) ||
-                (result.settings.find(s => s.key === 'm4aNotifs').value && data.fileName.endsWith('.m4a')) ||
-                (result.settings.find(s => s.key === 'mp4Notifs').value && data.fileName.endsWith('.mp4'))) {
-                console.log('download failed!');
-                browser.notifications.create({
-                    type: 'basic',
-                    iconUrl: 'icons/icon-48.png',
-                    title: 'Descargo: Download ERROR',
-                    message: `Video Download of ${truncateString(data.fileName, 30)} Failed!`
-                }).then(() => {
-                    console.log('notification created successfully.')
-                }).catch((e) => {
-                    console.log('ERROR in notification: ' + e.message)
-                });
-
-                newStatus = 'error';
-            }
+                if ((result.settings.find(s => s.key === 'm3u8Notifs').value && data.fileName.endsWith('.m3u8')) ||
+                    (result.settings.find(s => s.key === 'm4aNotifs').value && data.fileName.endsWith('.m4a')) ||
+                    (result.settings.find(s => s.key === 'mp4Notifs').value && data.fileName.endsWith('.mp4'))) {
+                    console.log('download failed!');
+                    browser.notifications.create({
+                        type: 'basic',
+                        iconUrl: 'icons/icon-48.png',
+                        title: 'Descargo: Download ERROR',
+                        message: `Video Download of ${truncateString(data.fileName, 30)} Failed!`
+                    }).then(() => {
+                        console.log('notification created successfully.')
+                    }).catch((e) => {
+                        console.log('ERROR in notification: ' + e.message)
+                    });
+                }
+            });
+            newStatus = 'error';
         }
 
         browser.storage.local.get('history').then((result) => {
