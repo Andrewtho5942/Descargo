@@ -4,6 +4,7 @@ const cors = require('cors');
 const { exec, spawn } = require('child_process');
 const kill = require('tree-kill');
 const fs = require('fs-extra');
+const fs_promises = require('fs').promises;
 const { google } = require('googleapis');
 const path = require('path');
 const axios = require('axios');
@@ -11,22 +12,14 @@ const os = require('os');
 const { Shazam } = require('node-shazam');
 const shazam = new Shazam();
 
-const key = require('./keys/yt-dl-443015-d39da117fe4a.json');
-const streamingPath = "C:\\Users\\andre\\Downloads\\streaming"
-const downloadsPath = streamingPath + "\\downloads";
-const m3u8Path = streamingPath + "\\m3u8";
+let downloadsPath = "";
+let m3u8Path = "";
+
 
 let activeProcesses = {};
 
-const gdriveFolderID = "17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q";
 
 let clients = [];
-
-const auth = new google.auth.GoogleAuth({
-  credentials: key,
-  scopes: ['https://www.googleapis.com/auth/drive.file'],
-});
-const drive = google.drive({ version: 'v3', auth });
 
 const app = express();
 const PORT = 5000;
@@ -70,8 +63,37 @@ app.get('/', (req, res) => {
 //   return latestFile;
 // }
 
+function createGdriveAuth(gdriveFolderID, keyPath) {
+  //const key = require('./keys/yt-dl-443015-d39da117fe4a.json');
+
+  const auth = new google.auth.GoogleAuth({
+    credentials: require(keyPath),
+    scopes: ['https://www.googleapis.com/auth/drive.file'],
+  });
+
+  return google.drive({ version: 'v3', auth });
+}
+
+async function ensureDirectoryExists(dirPath) {
+  try {
+    await fs_promises.mkdir(dirPath, { recursive: true });
+    console.log(`Directory ensured: ${dirPath}`);
+  } catch (err) {
+    console.error(`Error creating directory: ${err.message}`);
+  }
+}
+
+function updatePaths(outputPath) {
+  downloadsPath = outputPath + '\\downloads';
+  m3u8Path = outputPath + '\\m3u8';
+
+  // make sure these folders exist
+  ensureDirectoryExists(downloadsPath);
+  ensureDirectoryExists(m3u8Path);
+}
+
 // function to upload a file to google drive
-async function uploadFile(filePath, fileName) {
+async function uploadFile(filePath, fileName, drive, gdriveFolderID) {
   const fileMetadata = {
     name: fileName, // Name of the file in Drive
     parents: [gdriveFolderID],
@@ -113,7 +135,7 @@ app.get('/progress', (req, res) => {
 
 
 // Function to delete files that match a given prefix
-function clearCache(title) {
+function clearCache(fileName) {
   // Read all files in the directory
   fs.readdir(downloadsPath, (err, files) => {
     if (err) {
@@ -122,8 +144,8 @@ function clearCache(title) {
     }
 
     // Filter files that start with the given prefix
-    const matchingFiles = files.filter(file => file.startsWith(title));
-    console.log(`Matching files: ${matchingFiles.join(', ')}`);
+    const matchingFiles = files.filter(file => file.startsWith(fileName));
+    console.log(`Clear cache -- matching files: ${matchingFiles.join(', ')}`);
 
     // Loop through matching files
     matchingFiles.forEach(file => {
@@ -179,7 +201,8 @@ const getTitle = (url) => {
 app.post('/download', async (req, res) => {
   console.log('downloading file...');
 
-  const { url, format, gdrive, timestamp } = req.body;
+  const { url, format, gdrive, timestamp, outputPath, gdriveKeyPath, gdriveFolderID } = req.body;
+  updatePaths(outputPath);
 
   console.log('download link: ' + url);
 
@@ -194,12 +217,12 @@ app.post('/download', async (req, res) => {
 
   //rename the file
   let newFile = cleanedTitle + '.' + format;
-  let outputPath = downloadsPath + '\\' + newFile;
+  let filePath = downloadsPath + '\\' + newFile;
   console.log('new file: ' + newFile);
 
 
   // Construct yt-dlp command arguments
-  let args = [`"${url}"`, '-o', `"${outputPath}"`];
+  let args = [`"${url}"`, '-o', `"${filePath}"`];
   console.log('format: ' + format)
 
   if (format === 'mp4') {
@@ -222,7 +245,7 @@ app.post('/download', async (req, res) => {
   // normalize the yt-dlp audio when the download is done? Need to change original download path, and very time consuming:
   // ffmpeg -i "C:\Users\andre\Downloads\streaming\downloads\Moore_s_Law_is_Dead_Welcome_to_Light_Speed_Computers.mp4" -af "loudnorm=I=-16:TP=-1.5:LRA=11" -c:v copy "C:\Users\andre\Downloads\streaming\downloads\Moore_s_Law_is_Dead_Welcome_to_Light_Speed_Computers_new.mp4"
 
-  activeProcesses[timestamp] = { process: ytDlpProcess, title: cleanedTitle }
+  activeProcesses[timestamp] = { process: ytDlpProcess, fileName: newFile }
 
   // Listen to yt-dlp stderr for debugging
   ytDlpProcess.stderr.on('data', (data) => {
@@ -246,7 +269,7 @@ app.post('/download', async (req, res) => {
         console.log('download progress: ' + progressPercent);
 
         // Broadcast progress to clients with timestamp
-        const message = { progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp, title: cleanedTitle };
+        const message = { progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile };
         broadcastProgress(message)
       }
     });
@@ -258,7 +281,7 @@ app.post('/download', async (req, res) => {
       console.error(`error: yt-dlp exited with code ${code}`);
       res.send({ message: 'failure', file: url, timestamp: timestamp });
 
-      const message = { progress: 0, status: 'error', file: url, timestamp: timestamp, title: cleanedTitle };
+      const message = { progress: 0, status: 'error', file: url, timestamp: timestamp, fileName: newFile };
       broadcastProgress(message);
       clearCache(cleanedTitle)
       delete activeProcesses[timestamp];
@@ -268,8 +291,10 @@ app.post('/download', async (req, res) => {
 
     // upload to google drive if necessary
     if (gdrive) {
+      const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath);
+
       console.log('Uploading to gdrive', newFile);
-      uploadFile(outputPath, newFile);
+      uploadFile(filePath, newFile, drive, gdriveFolderID);
     }
 
 
@@ -277,10 +302,7 @@ app.post('/download', async (req, res) => {
     console.log(`yt-dlp completed successfully.`);
     res.send({ message: 'success', file: url, timestamp: timestamp, fileName: newFile });
 
-    console.log('cleanedTitle: ')
-    console.log(cleanedTitle)
-
-    broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed', title: cleanedTitle });
+    broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed', fileName: newFile });
 
 
     delete activeProcesses[timestamp];
@@ -289,7 +311,7 @@ app.post('/download', async (req, res) => {
   ytDlpProcess.on('error', (error) => {
     console.error(`Error executing yt-dlp: ${error.message}`);
     res.send({ message: 'failure', timestamp: timestamp });
-    broadcastProgress({ progress: 0, timestamp: historyEntry.timestamp, file: url, status: 'error', title: cleanedTitle });
+    broadcastProgress({ progress: 0, timestamp: historyEntry.timestamp, file: url, status: 'error', fileName: newFile });
     delete activeProcesses[timestamp];
   });
 });
@@ -311,12 +333,17 @@ function getTotalDuration(input) {
 }
 
 
-//download a m3u8 file
+// download a m3u8 file
 app.post('/download_m3u8', async (req, res) => {
   console.log('downloading m3u8 file...');
 
-  const { link, timestamp, title } = req.body;
-  const title_date = title + '--' + Date.parse(timestamp);
+  const { link, timestamp, title, outputPath, gdrive, gdriveKeyPath, gdriveFolderID } = req.body;
+  updatePaths(outputPath)
+
+  // const fileName = title + '--' + Date.parse(timestamp);
+  const m3u8Name = title + '.m3u8';
+  const errorMessage = { progress: 0, timestamp: timestamp, file: link, status: 'error', fileName: m3u8Name };
+
 
   // download the m3u8 file locally first
   let m3u8Response = null;
@@ -325,26 +352,32 @@ app.post('/download_m3u8', async (req, res) => {
     if (!m3u8Response) {
       console.log('error getting m3u8: no response')
       // notify clients of error
-      const message = { progress: 0, timestamp: timestamp, file: link, status: 'error', title: title };
-      broadcastProgress(message)
-      res.send(message)
+      broadcastProgress(errorMessage)
+      res.send(errorMessage)
       return;
     }
   } catch (e) {
     console.log('error getting m3u8: ' + e.message)
-    const message = { progress: 0, timestamp: timestamp, file: link, status: 'error', title: title };
-    broadcastProgress(message);
-    res.send(message)
+    broadcastProgress(errorMessage);
+    res.send(errorMessage)
     return;
   }
 
   const m3u8Content = m3u8Response.data;
   // Save the .m3u8 file locally
-  const m3u8LocalPath = `C:/Users/andre/Downloads/streaming/m3u8/${title_date}.m3u8`;
-  fs.writeFileSync(m3u8LocalPath, m3u8Content, 'utf8');
+  const m3u8LocalPath = `${m3u8Path}\\${m3u8Name}`;
+  try {
+    fs.writeFileSync(m3u8LocalPath, m3u8Content, 'utf8');
+  } catch (e) {
+    console.log('error saving m3u8 file locally: ' + e.message);
+    broadcastProgress(errorMessage);
+    res.send(errorMessage)
+    return;
+  }
 
+  const mp4Output = `${title}.mp4`
 
-  const output_file = `C:/Users/andre/Downloads/streaming/downloads/${title_date}.mp4`
+  const output_file = `${downloadsPath}/${mp4Output}`
 
   const totalDuration = await getTotalDuration(link);
   console.log('total duration (in seconds) of the file: ' + totalDuration)
@@ -365,7 +398,7 @@ app.post('/download_m3u8', async (req, res) => {
     '-nostats',
   ]);
 
-  activeProcesses[timestamp] = { process: ffmpegProcess, title: title_date }
+  activeProcesses[timestamp] = { process: ffmpegProcess, fileName: m3u8Name }
 
   let progressData = '';
 
@@ -384,7 +417,7 @@ app.post('/download_m3u8', async (req, res) => {
 
           console.log(`Progress: ${progressPercentage.toFixed(2)}%`);
 
-          const message = { progress: progressPercentage.toFixed(2), status: 'in-progress', file: link, timestamp: timestamp, title: title };
+          const message = { progress: progressPercentage.toFixed(2), status: 'in-progress', file: link, timestamp: timestamp, fileName: m3u8Name };
           broadcastProgress(message)
         }
       }
@@ -402,15 +435,21 @@ app.post('/download_m3u8', async (req, res) => {
     console.log(`ffmpeg exited with code ${code}`);
     if (code !== 0) {
       // notify clients of error
-      const message = { progress: 0, timestamp: timestamp, file: link, status: 'error', title: title };
+      const message = { progress: 0, timestamp: timestamp, file: link, status: 'error', fileName: m3u8Name };
       broadcastProgress(message)
 
       //clean up cached files
       clearCache(title)
     } else {
-      // download completed successfully
-      broadcastProgress({ timestamp: timestamp, file: link, progress: 100, status: 'completed', title: title });
 
+      if (gdrive) {
+        const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath);
+        console.log('Uploading to gdrive', mp4Output);
+        uploadFile(output_file, mp4Output, drive, gdriveFolderID);
+      }
+
+      // download completed successfully
+      broadcastProgress({ timestamp: timestamp, file: link, progress: 100, status: 'completed', fileName: m3u8Name });
     }
 
     delete activeProcesses[timestamp];
@@ -513,10 +552,15 @@ app.post('/kill_processes', async (req, res) => {
 });
 
 
+
 //open a folder
 app.post('/open', (req, res) => {
+
   //execute the autohotkey script that will open and focus file explorer
-  exec('"C:\\Program Files\\AutoHotkey\\v2\\AutoHotkey.exe" "C:\\Users\\andre\\focusExplorer.ahk"', (err, out, errst) => {
+  const { focusExplorerPath, AHKPath, outputPath } = req.body;
+  updatePaths(outputPath);
+
+  exec(`"${AHKPath}" "${focusExplorerPath}" "${downloadsPath}"`, (err, out, errst) => {
     if (err) {
       console.error(`Error bringing window to front: ${err.message}`);
     }
@@ -532,7 +576,9 @@ app.post('/open', (req, res) => {
 
 // clear a folder
 app.post('/clear', (req, res) => {
-  const { type } = req.body;
+  const { type, outputPath, gdriveKeyPath, gdriveFolderID } = req.body;
+  updatePaths(outputPath);
+
   if (type === 'local-downloads') {
     // clear local downloads folder
     fs.emptyDir(downloadsPath)
@@ -545,6 +591,7 @@ app.post('/clear', (req, res) => {
         res.send({ message: 'error' });
       });
   } else if (type === 'gdrive-downloads') {
+    const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath);
     // clear gdrive downloads folder (only files that the bot uploaded)
     drive.files.list({
       q: `'${gdriveFolderID}' in parents and trashed = false`,

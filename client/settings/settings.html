@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YT-Downloader Settings</title>
+  <title>Descargo Settings</title>
   <link rel="icon" href="dl.png" type="image/x-icon">
   <link rel="stylesheet" href="settings.css">
 </head>
@@ -21,21 +21,25 @@
       </label>
     </div>
     <div class="grid-item">
-      m4a Notifications
-      <label class="switch">
-        <input type="checkbox" class="switch-checkbox" />
-        <span class="slider"></span>
-      </label>
-    </div>
-    <div class="grid-item">
       mp4 Notifications
       <label class="switch">
         <input type="checkbox" class="switch-checkbox" />
         <span class="slider"></span>
       </label>
     </div>
+    <div class="grid-item">
+      m4a Notifications
+      <label class="switch">
+        <input type="checkbox" class="switch-checkbox" />
+        <span class="slider"></span>
+      </label>
+    </div>
     <div class="grid-item large">
-      AutoHotkey Script Path
+      AHK Executable Path
+      <input type="text" placeholder="/path/to/your/AutoHotkey.exe" class="text-input" autocomplete="off"></input>
+    </div>
+    <div class="grid-item large">
+      focusExplorer.ahk Script Path
       <input type="text" placeholder="/path/to/your/focusExplorer.ahk" class="text-input" autocomplete="off"></input>
     </div>
     <div class="grid-item">
@@ -46,13 +50,20 @@
         <span class="slider"></span>
       </label>
     </div>
+    <div class="grid-item">
+      Cloud Mode
+      <label class="switch">
+        <input type="checkbox" class="switch-checkbox" />
+        <span class="slider"></span>
+      </label>
+    </div>
   </div>
 
   <div class="container">
     <span class="label">Downloads</span>
     <div class="grid-item large">
-      Downloads Folder Path
-      <input type="text" placeholder="/path/to/your/downloads/" class="text-input" autocomplete="off"></input>
+      Output Folder Path
+      <input type="text" placeholder="/path/to/your/outputFolder" class="text-input" autocomplete="off"></input>
     </div>
     <div class="grid-item">
       Remove Subtext
@@ -69,9 +80,18 @@
       </label>
     </div>
     <div class="grid-item large">
+      Google Drive Key Path
+      <input type="text" placeholder="/path/to/your/JSON_Key" class="text-input" autocomplete="off"></input>
+    </div>
+    <div class="grid-item large">
+      Google Drive Output Folder ID
+      <input type="text" placeholder="The last part of the folder URL" class="text-input" autocomplete="off"></input>
+    </div>
+    <div class="grid-item large">
       Playlist Link / Start Download
       <form id="playlist-form">
-        <input type="text" placeholder="https://your-playlist.youtube.com" class="text-input" id="playlist-input" autocomplete="off">
+        <input type="text" placeholder="https://your-playlist.youtube.com" class="text-input" id="playlist-input"
+          autocomplete="off">
         <div id="playlist-btn">Start</div>
       </form>
     </div>
@@ -82,16 +102,23 @@
         <span class="slider"></span>
       </label>
     </div>
-
   </div>
+
+
   <div class="container">
-    <span class="label">Hotkey Bindings</span>
+    <span class="label">Edit Hotkey Bindings</span>
+    <div class="grid-item">
+      Submit Link
+      <label class="hotkey-label">
+        <input type="checkbox" class="hotkey"></input>
+        <div class="hotkey-text"></div>
+      </label>
+    </div>
     <div class="grid-item">
       Switch Download Format
       <label class="hotkey-label">
         <input type="checkbox" class="hotkey"></input>
         <div class="hotkey-text"></div>
-
       </label>
     </div>
     <div class="grid-item">
@@ -145,8 +172,9 @@
     </div>
   </div>
 
+
   <div class="header">
-    <div class="header-text"><img src="dl.png" alt="dl-icon" class="header-icon" />YT-Downloader</div>
+    <div class="header-text"><img src="dl.png" alt="dl-icon" class="header-icon" />Descargo Settings</div>
   </div>
 
   <script src="settings.js"></script>

@@ -43,7 +43,6 @@ function App() {
   const SERVER_PORT = 5000;
   const serverURL = ISLOCAL ? `http://localhost:${SERVER_PORT}` : "https://3a51-156-146-107-197.ngrok-free.app";
 
-  const gdriveFolderID = "17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q";
   const [result, setResult] = useState('');
   const [popupSettings, setPopupSettings] = useState([false, true, '']); // videoFormat, gdrive, link
   const [m3u8Open, setM3u8Open] = useState(false);
@@ -174,7 +173,7 @@ function App() {
         browser.storage.local.get('history').then((result) => {
           const history = result.history || [];
           //console.log('retrieved history:')
-          console.log(history);
+          //console.log(history);
           setHistory(history);
         }).catch((error) => {
           console.error('Error retrieving history:', error);
@@ -233,9 +232,9 @@ function App() {
   }, [])
 
 
-  const addToHistory = (file, title, progress, timestamp, status) => {
+  const addToHistory = (file, fileName, progress, timestamp, status) => {
     let newHistory = historyRef.current;
-    newHistory.unshift({ file, title, progress, timestamp, status })
+    newHistory.unshift({ file, fileName, progress, timestamp, status })
 
     if (newHistory.length > 12) {
       newHistory = newHistory.slice(0, 12);
@@ -251,7 +250,7 @@ function App() {
     const inputFocused =
       e.target.tagName === 'INPUT' ||
       e.target.tagName === 'TEXTAREA';
-    if (e.key === 'Enter') {
+    if (e.key === settingsRef.current.find(s => s.key === 'submitHotkey')?.value) {
       submitLink();
     } else if (!inputFocused) {
       switch (e.key) {
@@ -318,7 +317,7 @@ function App() {
 
   const download_m3u8 = (link, title, index) => {
     const timestamp = new Date().toISOString();
-
+    const name = title + '--' + Date.parse(timestamp);
     // set the background to green
 
     setM3u8bg((prevbgs) => {
@@ -342,7 +341,11 @@ function App() {
         },
         link: link,
         timestamp: timestamp,
-        title: title
+        title: name,
+        outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
+        gdrive: popupSettings[1],
+        gdriveKeyPath: settingsRef.current.find(s => s.key === 'gdriveJSONKey').value,
+        gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value
       }).then((result) => {
         if (result.data.status === 'error') {
           //update the history if it times out
@@ -358,7 +361,8 @@ function App() {
           });
         }
       });
-      addToHistory(link, title, 0, timestamp, 'in-progress');
+      console.log('name: ' + name)
+      addToHistory(link, name + '.m3u8', 0, timestamp, 'in-progress');
     } catch (error) {
       console.error('Error:', error);
     }
@@ -413,7 +417,7 @@ function App() {
       const format = videoFormatRef.current ? 'mp4' : 'm4a';
 
       addToHistory(linkRef.current, 'fetching title... ', 0, timestamp, 'in-progress');
-
+      console.log('outputPath: ' + settingsRef.current.find(s => s.key === 'outputPath').value)
       axios.post(`${serverURL}/download`, {
         headers: {
           'ngrok-skip-browser-warning': '1'
@@ -421,7 +425,10 @@ function App() {
         url: linkRef.current,
         format: format,
         gdrive: popupSettings[1],
-        timestamp: timestamp
+        timestamp: timestamp,
+        outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
+        gdriveKeyPath: settingsRef.current.find(s => s.key === 'gdriveJSONKey').value,
+        gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value
       }).then((response) => {
         console.log('download response: ')
         console.log(response.data.message)
@@ -451,11 +458,14 @@ function App() {
         headers: {
           'ngrok-skip-browser-warning': '1'
         },
-        type: local ? 'local-downloads' : 'gdrive-downloads'
+        type: local ? 'local-downloads' : 'gdrive-downloads',
+        outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
+        gdriveKeyPath: settingsRef.current.find(s => s.key === 'gdriveJSONKey').value,
+        gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value
       }).then((response) => {
         let color = 'red'
         if (response.data.message === 'success') {
-          let darkMode = settings.find(s => s.key === 'darkMode').value
+          let darkMode = settingsRef.current.find(s => s.key === 'darkMode').value
           if (darkMode) {
             color = '#126d32';
           } else {
@@ -536,6 +546,9 @@ function App() {
           headers: {
             'ngrok-skip-browser-warning': '1'
           },
+          focusExplorerPath: settingsRef.current.find(s => s.key === 'focusExplorerPath').value,
+          AHKPath: settingsRef.current.find(s => s.key === 'AHKPath').value,
+          outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
         }).then((response) => {
 
           console.log(response.data.message)
@@ -544,7 +557,7 @@ function App() {
         console.error('Error:', error);
       }
     } else {
-      const url = `https://drive.google.com/drive/folders/${gdriveFolderID}`;
+      const url = `https://drive.google.com/drive/folders/${settingsRef.current.find(s=>s.key==='gdriveFolderID').value}`;
       window.open(url);
     }
   }
@@ -555,7 +568,7 @@ function App() {
       <img src={download} alt="youtube" draggable="false" className="dl-img"></img>
       <img src={settingsIcon} alt="settings" draggable="false" className='settings-img' onClick={() => { browser.runtime.openOptionsPage() }}></img>
       <span className="header">
-        <h1>YT-Downloader</h1>
+        <h1>Descargo</h1>
       </span>
 
       <input
@@ -659,7 +672,7 @@ function App() {
           <tbody>
             {history.map((item) => {
               try {
-                const { file, title, progress, timestamp, status } = item;
+                const { file, fileName, progress, timestamp, status } = item;
 
                 const isURL = validator.isURL(file);
 
@@ -679,7 +692,7 @@ function App() {
                     hour12: true,
                   })}</div></td>
                   <td className='history-link' tabIndex="-1"><div className='history-content' tabIndex="-1">
-                    {item.status === 'in-progress' && <>{`${progress}% - `}<button style={{ marginRight: '4px' }} tabIndex="-1" onClick={() => { stopDownload(timestamp) }}>stop</button></>}{title + ': '}{isURL ? <a href={file} tabIndex="-1">{file}</a> : file}
+                    {item.status === 'in-progress' && <>{`${progress}% - `}<button style={{ marginRight: '4px' }} tabIndex="-1" onClick={() => { stopDownload(timestamp) }}>stop</button></>}{fileName + ': '}{isURL ? <a href={file} tabIndex="-1">{file}</a> : file}
                   </div></td>
                 </tr>
               } catch (e) {

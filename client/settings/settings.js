@@ -1,16 +1,22 @@
 settings = [
   { key: "m3u8Notifs", value: true },
+  { key: "mp4Notifs", value: true },
   { key: "m4aNotifs", value: false },
-  { key: "mp4Notifs", value: false },
-  { key: "AHKPath", value: '' },
+  { key: "AHKPath", value: 'C:\\Program Files\\AutoHotkey\\v2\\AutoHotkey.exe' },
+  { key: "focusExplorerPath", value: 'C:\\Users\\andre\\focusExplorer.ahk' },
   { key: "darkMode", value: true },
+  { key: "cloudMode", value: false},
 
-  { key: "downloadsPath", value: '' },
+  { key: "outputPath", value: 'C:\\Users\\andre\\Downloads\\Descargo' },
   { key: "removeSubtext", value: true },
   { key: "normalizeAudio", value: true },
+  { key: "gdriveJSONKey", value: 'C:\\Users\\andre\\OneDrive\\Documents\\Webdev\\descargo\\server\\keys\\yt-dl-443015-d39da117fe4a.json' },
+  { key: "gdriveFolderID", value: '17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q' },
   { key: "playlistLink", value: '' },
   { key: "useShazam", value: false },
 
+
+  { key: "submitHotkey", value: 'Enter' },
   { key: "formatHotkey", value: 'p' },
   { key: "gdriveHotkey", value: 'g' },
   { key: "getMenuHotkey", value: 'n' },
@@ -18,13 +24,11 @@ settings = [
   { key: "openClearHotkey", value: 'o' },
   { key: "backHotkey", value: 'Backspace' },
   { key: "autofillHotkey", value: 'f' },
-  { key: "settingsHotkey", value: 's' }
+  { key: "settingsHotkey", value: 's' },
 ]
 
 let storage = browser.storage.local;
 let inputElements = [];
-
-
 
 
 function setInputValues() {
@@ -75,9 +79,6 @@ function updateFromStorage() {
 
 
 
-
-
-
 document.addEventListener('DOMContentLoaded', () => {
   inputElements = document.getElementsByTagName('input')
   console.log('input elements: ')
@@ -97,7 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (classes.contains('switch-checkbox')) {
       input.addEventListener('click', () => {
         //store the new setting change
-        console.log('new value for input ' + i + ': ' + input.checked);
+        console.log('new value for settings field ' + settings[i].key + ': ' + input.checked);
         settings[i].value = input.checked;
         storage.set({ ['settings']: settings });
 
@@ -205,11 +206,11 @@ document.addEventListener('DOMContentLoaded', () => {
     event.preventDefault();
 
 
-    console.log('starting playlist download: '+playlistInput.value);
+    console.log('starting playlist download: ' + playlistInput.value);
 
 
-    playlistInput.value='';
-    settings.find(s=>s.key==='playlistLink').value = '';
+    playlistInput.value = '';
+    settings.find(s => s.key === 'playlistLink').value = '';
     storage.set({ ['settings']: settings });
 
   }

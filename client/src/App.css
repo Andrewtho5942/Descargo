@@ -82,17 +82,17 @@ html {
 
 h1 {
   color: rgb(40, 160, 60);
-  margin-top: 5px;
-  margin-bottom: 8px;
-  padding-left: 85px;
+  margin-top: 2px;
+  margin-bottom: 5px;
+  padding-left: 120px;
 }
 
 .dl-img {
   width: 30px;
   height: 30px;
   position: absolute;
-  left: 55px;
-  top: 20px;
+  left: 90px;
+  top: 17px;
 }
 
 .settings-img {
@@ -186,7 +186,7 @@ h1 {
   width: 48px;
   height: 48px;
   left: 200px;
-  top: 112px;
+  top: 106px;
 }
 
 .success,
@@ -194,13 +194,13 @@ h1 {
   width: 24px;
   height: 24px;
   left: 212px;
-  top: 124px;
+  top: 118px;
 }
 
 .format {
   position: absolute;
   left: 10px;
-  top: 119px;
+  top: 113px;
   font-size: large;
 }
 
@@ -208,7 +208,7 @@ h1 {
 .gdrive {
   position: absolute;
   left: 245px;
-  top: 119px;
+  top: 113px;
   font-size: large;
 }
 
@@ -345,7 +345,7 @@ h1 {
 .autofill-btn {
   position: absolute;
   cursor: pointer;
-  top: 74px;
+  top: 68px;
   left: 321px;
   color: rgb(40, 160, 60);
   /*font-weight: bold;*/
@@ -367,10 +367,10 @@ h1 {
   position: absolute;
   transition: transform 0.3s ease;
   width: 100%;
-  top: 70px;
+  top: 62px;
   left: 0;
   background-color: var(--background-color);
-  height: 84px;
+  height: 86px;
 }
 
 .menu-empty {

@@ -1,4 +1,4 @@
-# YT-Downloader
+# Descargo
 - This project is a firefox browser extension that enables you to download videos from any hosting platform on the internet, either with a link,
 or by detecting .m3u8 files as they are loaded by the page and converting them to mp4.
 - The extension uses a server running locally to do file manipulation currently, including ffmpeg for .m3u8 file conversion and yt-dlp for downloading and processing youtube videos.
