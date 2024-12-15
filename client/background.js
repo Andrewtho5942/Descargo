@@ -1,6 +1,6 @@
 
 
-const SERVER_PORT = 5000;
+const SERVER_PORT = 5001;
 
 function storeLink(link, title) {
     const timestamp = new Date().toISOString();
@@ -93,8 +93,8 @@ eventSource.onmessage = (event) => {
                     browser.notifications.create({
                         type: 'basic',
                         iconUrl: 'icons/icon-48.png',
-                        title: 'Descargo: Finished',
-                        message: `Video Download of ${truncateString(data.fileName, 30)} Finished!`
+                        title: '✓ Descargo Finished',
+                        message: `Download of ${truncateString(data.fileName, 30)} Finished!`
                     }).then(() => {
                         console.log('notification created successfully.')
                     }).catch((e) => {
@@ -111,21 +111,22 @@ eventSource.onmessage = (event) => {
             browser.storage.local.get('settings').then((result) => {
                 console.log('pulled settings: ');
                 console.log(result.settings)
-
-                if ((result.settings.find(s => s.key === 'm3u8Notifs').value && data.fileName.endsWith('.m3u8')) ||
-                    (result.settings.find(s => s.key === 'm4aNotifs').value && data.fileName.endsWith('.m4a')) ||
-                    (result.settings.find(s => s.key === 'mp4Notifs').value && data.fileName.endsWith('.mp4'))) {
-                    console.log('download failed!');
-                    browser.notifications.create({
-                        type: 'basic',
-                        iconUrl: 'icons/icon-48.png',
-                        title: 'Descargo: Download ERROR',
-                        message: `Video Download of ${truncateString(data.fileName, 30)} Failed!`
-                    }).then(() => {
-                        console.log('notification created successfully.')
-                    }).catch((e) => {
-                        console.log('ERROR in notification: ' + e.message)
-                    });
+                if (result.settings.find(s => s.key === 'failureNotifs').value) {
+                    if ((result.settings.find(s => s.key === 'm3u8Notifs').value && data.fileName.endsWith('.m3u8')) ||
+                        (result.settings.find(s => s.key === 'm4aNotifs').value && data.fileName.endsWith('.m4a')) ||
+                        (result.settings.find(s => s.key === 'mp4Notifs').value && data.fileName.endsWith('.mp4'))) {
+                        console.log('download failed!');
+                        browser.notifications.create({
+                            type: 'basic',
+                            iconUrl: 'icons/icon-48.png',
+                            title: '✘ Descargo Failed',
+                            message: `Download of ${truncateString(data.fileName, 30)} Failed!`
+                        }).then(() => {
+                            console.log('notification created successfully.')
+                        }).catch((e) => {
+                            console.log('ERROR in notification: ' + e.message)
+                        });
+                    }
                 }
             });
             newStatus = 'error';

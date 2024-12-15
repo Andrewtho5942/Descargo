@@ -22,7 +22,7 @@ let activeProcesses = {};
 let clients = [];
 
 const app = express();
-const PORT = 5000;
+const PORT = 5001;
 
 // middleware
 app.use(cors());
@@ -201,7 +201,7 @@ const getTitle = (url) => {
 app.post('/download', async (req, res) => {
   console.log('downloading file...');
 
-  const { url, format, gdrive, timestamp, outputPath, gdriveKeyPath, gdriveFolderID } = req.body;
+  const { url, format, gdrive, timestamp, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext, normalizeAudio, useShazam } = req.body;
   updatePaths(outputPath);
 
   console.log('download link: ' + url);
@@ -337,7 +337,7 @@ function getTotalDuration(input) {
 app.post('/download_m3u8', async (req, res) => {
   console.log('downloading m3u8 file...');
 
-  const { link, timestamp, title, outputPath, gdrive, gdriveKeyPath, gdriveFolderID } = req.body;
+  const { link, timestamp, title, outputPath, gdrive, gdriveKeyPath, gdriveFolderID, normalizeAudio } = req.body;
   updatePaths(outputPath)
 
   // const fileName = title + '--' + Date.parse(timestamp);

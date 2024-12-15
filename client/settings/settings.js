@@ -1,20 +1,21 @@
 settings = [
-  { key: "m3u8Notifs", value: true },
-  { key: "mp4Notifs", value: true },
-  { key: "m4aNotifs", value: false },
   { key: "AHKPath", value: 'C:\\Program Files\\AutoHotkey\\v2\\AutoHotkey.exe' },
   { key: "focusExplorerPath", value: 'C:\\Users\\andre\\focusExplorer.ahk' },
   { key: "darkMode", value: true },
   { key: "cloudMode", value: false},
 
+  { key: "m3u8Notifs", value: true },
+  { key: "mp4Notifs", value: true },
+  { key: "m4aNotifs", value: false },
+  { key: "failureNotifs", value: false },
+
   { key: "outputPath", value: 'C:\\Users\\andre\\Downloads\\Descargo' },
   { key: "removeSubtext", value: true },
   { key: "normalizeAudio", value: true },
-  { key: "gdriveJSONKey", value: 'C:\\Users\\andre\\OneDrive\\Documents\\Webdev\\descargo\\server\\keys\\yt-dl-443015-d39da117fe4a.json' },
-  { key: "gdriveFolderID", value: '17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q' },
   { key: "playlistLink", value: '' },
   { key: "useShazam", value: false },
-
+  { key: "gdriveJSONKey", value: 'C:\\Users\\andre\\OneDrive\\Documents\\Webdev\\descargo\\server\\keys\\yt-dl-443015-d39da117fe4a.json' },
+  { key: "gdriveFolderID", value: '17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q' },
 
   { key: "submitHotkey", value: 'Enter' },
   { key: "formatHotkey", value: 'p' },

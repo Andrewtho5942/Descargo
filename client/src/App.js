@@ -40,7 +40,7 @@ const defaultSettings = [
 function App() {
 
   const ISLOCAL = true;
-  const SERVER_PORT = 5000;
+  const SERVER_PORT = 5001;
   const serverURL = ISLOCAL ? `http://localhost:${SERVER_PORT}` : "https://3a51-156-146-107-197.ngrok-free.app";
 
   const [result, setResult] = useState('');
@@ -345,7 +345,8 @@ function App() {
         outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
         gdrive: popupSettings[1],
         gdriveKeyPath: settingsRef.current.find(s => s.key === 'gdriveJSONKey').value,
-        gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value
+        gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value,
+        normalizeAudio: settingsRef.current.find(s => s.key === 'normalizeAudio').value
       }).then((result) => {
         if (result.data.status === 'error') {
           //update the history if it times out
@@ -428,7 +429,10 @@ function App() {
         timestamp: timestamp,
         outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
         gdriveKeyPath: settingsRef.current.find(s => s.key === 'gdriveJSONKey').value,
-        gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value
+        gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value,
+        removeSubtext: settingsRef.current.find(s => s.key === 'removeSubtext').value,
+        normalizeAudio: settingsRef.current.find(s => s.key === 'normalizeAudio').value,
+        useShazam: settingsRef.current.find(s => s.key === 'useShazam').value
       }).then((response) => {
         console.log('download response: ')
         console.log(response.data.message)
@@ -557,7 +561,7 @@ function App() {
         console.error('Error:', error);
       }
     } else {
-      const url = `https://drive.google.com/drive/folders/${settingsRef.current.find(s=>s.key==='gdriveFolderID').value}`;
+      const url = `https://drive.google.com/drive/folders/${settingsRef.current.find(s => s.key === 'gdriveFolderID').value}`;
       window.open(url);
     }
   }
@@ -650,7 +654,12 @@ function App() {
                     hour: 'numeric',
                     minute: '2-digit',
                     hour12: true,
-                  })}</div></td>
+                  })}{', '}
+                    {new Date(timestamp).toLocaleDateString([], {
+                      month: '2-digit',
+                      day: '2-digit',
+                      year: 'numeric'
+                    })}</div></td>
                   <td className='m3u8-link' tabIndex="-1"><div className='link-content' tabIndex="-1">{m3u8_title + ': '}{isURL ? <a href={m3u8_link}>{m3u8_link}</a> : m3u8_link}</div></td>
                   <td className={`m3u8-dl ${m3u8bg[index] ? 'active' : 'inactive'} ${isURL ? 'valid-url' : ''}`} tabIndex="-1">
                     <img src={dl_image} tabIndex="-1" onClick={() => { isURL ? download_m3u8(m3u8_link, m3u8_title, index) : '' }} draggable="false"></img>
@@ -678,19 +687,23 @@ function App() {
 
                 return <tr className='history-entry' tabIndex="-1" style={{
                   background: status === 'in-progress' ?
-                    `linear-gradient(to right, rgba(0, 255, 0, 0.1) ${progress}%, transparent ${progress}%)`
+                    `linear-gradient(to right, rgba(40, 255, 40, 0.1) ${progress - 1}%, rgb(200,50,50) ${progress}%, transparent ${progress + 1}%)`
                     : (status === 'completed' ?
-                      `linear-gradient(to right, rgba(0, 255, 0, 0.12) ${progress}%, transparent ${progress}%)`
+                      `linear-gradient(to right, rgba(40, 255, 40, 0.12) 100%, black 0%)`
                       : 'rgba(255,0,0,0.08)'
                     )
                 }}>
                   <td className='history-timestamp' tabIndex="-1"><div className='timestamp-content' tabIndex="-1">{new Date(timestamp).toLocaleTimeString([], {
-                    month: '2-digit',
-                    day: '2-digit',
                     hour: 'numeric',
                     minute: '2-digit',
                     hour12: true,
-                  })}</div></td>
+                  })}{', '}
+                    {new Date(timestamp).toLocaleDateString([], {
+                      month: '2-digit',
+                      day: '2-digit',
+                      year: 'numeric'
+                    })}
+                  </div></td>
                   <td className='history-link' tabIndex="-1"><div className='history-content' tabIndex="-1">
                     {item.status === 'in-progress' && <>{`${progress}% - `}<button style={{ marginRight: '4px' }} tabIndex="-1" onClick={() => { stopDownload(timestamp) }}>stop</button></>}{fileName + ': '}{isURL ? <a href={file} tabIndex="-1">{file}</a> : file}
                   </div></td>

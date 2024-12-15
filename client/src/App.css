@@ -2,6 +2,8 @@
   /* Dark Theme */
 
   --background-color: rgb(22, 23, 26);
+  --background-color-table: rgb(12, 13, 16);
+
   --header-bg: rgb(31, 32, 35);
   /*--header-bg: rgb(43, 47, 49);*/
 
@@ -30,6 +32,7 @@
 [data-theme='light'] {
   /* Light Theme */
   --background-color: rgb(250, 250, 250);
+  --background-color-table: rgb(255, 255, 255);
   --header-bg: rgb(223, 227, 229);
   --link-bg: rgb(215, 218, 220);
   --download-btn-bg: rgb(150, 235, 150);
@@ -212,11 +215,13 @@ h1 {
   font-size: large;
 }
 
-.format:not(.active), .gdrive:not(.active) {
+.format:not(.active),
+.gdrive:not(.active) {
   color: var(--text-color-mute);
 }
 
-.format.active, .gdrive.active {
+.format.active,
+.gdrive.active {
   color: var(--text-color);
 }
 
@@ -400,9 +405,8 @@ h1 {
   margin: 5px 10px;
   border-collapse: collapse;
   width: 300px;
-  /* Set the table width */
   table-layout: fixed;
-  /* Ensures fixed table layout */
+  background-color: var(--background-color-table);
 }
 
 .m3u8-table td,
@@ -411,11 +415,9 @@ h1 {
   padding: 2px 5px;
   vertical-align: middle;
   overflow: hidden;
-  /* Hide overflow in td */
 }
 
 .m3u8-entry {
-  color: rgb(40, 160, 60);
   width: 100%;
   transition: background-color 0.3s ease;
 }
@@ -426,11 +428,11 @@ h1 {
 }
 
 .m3u8-timestamp {
-  width: 75px;
+  width: 115px;
 }
 
 .m3u8-link {
-  width: 220px;
+  width: 180px;
 }
 
 .m3u8-dl {
@@ -458,16 +460,15 @@ h1 {
 
 /* history table */
 .history-entry {
-  color: var(--text-color-mute);
   width: 100%;
 }
 
 .history-timestamp {
-  width: 120px;
+  width: 115px;
 }
 
 .history-link {
-  width: 205px;
+  width: 210px;
 }
 
 .history-content button {
@@ -489,6 +490,7 @@ h1 {
 .history-content {
   overflow-x: auto;
   white-space: nowrap;
+  scrollbar-width: none;
 }
 
 /* Optional: Hide scrollbars */
@@ -498,12 +500,13 @@ h1 {
   display: none;
 }
 
-.timestamp-content,
-.link-content,
-.history-content {
-  scrollbar-width: none;
+.timestamp-content {
+  color: rgb(40, 160, 60);
 }
 
+.link-content, .history-content {
+  color: var(--text-color-mute);
+}
 
 /* fancy checkbox styling */
 .checkbox-container input[type="checkbox"] {
