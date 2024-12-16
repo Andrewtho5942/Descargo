@@ -39,29 +39,22 @@ app.get('/', (req, res) => {
   res.send('hello, world!');
 })
 
-// shazam.recognise("C:\\Users\\andre\\Downloads\\streaming\\downloads\\Avenged Sevenfold - Hail To The King.m4a", 'en-US').then((result) => {
-//   console.log('found song: '+result.track.subtitle + ' - '+result.track.title+' | link: '+result.track.url);
-// });
 
 
-// function to get the most recently modified file in a folder
-// function getMostRecentFile(dir) {
-//   const files = fs.readdirSync(dir); // Read all files in the directory
-//   let latestFile = null;
-//   let latestTime = 0;
-
-//   files.forEach((file) => {
-//     const filePath = path.join(dir, file);
-//     const stat = fs.statSync(filePath);
-
-//     if (stat.isFile() && stat.mtimeMs > latestTime) {
-//       latestFile = filePath;
-//       latestTime = stat.mtimeMs;
-//     }
-//   });
-
-//   return latestFile;
-// }
+function deleteFileIfExists(path) {
+  if (fs.existsSync(path)) {
+    //delete the file
+    fs.unlink(path, (err) => {
+      if (err) {
+        console.error(`Error deleting file ${path}:`, err);
+      } else {
+        console.log(`Deleted file: ${path}`);
+      }
+    });
+  } else {
+    console.log('delete file -- file does not exist: ' + path);
+  }
+}
 
 function createGdriveAuth(gdriveFolderID, keyPath) {
   //const key = require('./keys/yt-dl-443015-d39da117fe4a.json');
@@ -94,20 +87,16 @@ function updatePaths(outputPath) {
 
 // function to upload a file to google drive
 async function uploadFile(filePath, fileName, drive, gdriveFolderID) {
-  const fileMetadata = {
-    name: fileName, // Name of the file in Drive
-    parents: [gdriveFolderID],
-  };
-
-  const media = {
-    mimeType: 'application/octet-stream',
-    body: fs.createReadStream(filePath),
-  };
-
   try {
     drive.files.create({
-      resource: fileMetadata,
-      media: media,
+      resource: {
+        name: fileName,
+        parents: [gdriveFolderID],
+      },
+      media: {
+        mimeType: 'application/octet-stream',
+        body: fs.createReadStream(filePath)
+      },
       fields: 'id',
     });
     console.log('File uploaded successfully!');
@@ -152,24 +141,20 @@ function clearCache(fileName) {
       const filePath = path.join(downloadsPath, file);
 
       //delete the file
-      fs.unlink(filePath, (err) => {
-        if (err) {
-          console.error(`Error deleting file ${filePath}:`, err);
-        } else {
-          console.log(`Deleted file: ${filePath}`);
-        }
-      });
+      deleteFileIfExists(filePath);
     });
   });
 }
 
 
 
-const processVideoTitle = (title) => {
-  return title.replace(/(\[.*?\]|\(.*?\))/g, '') //remove any text in brackets or parenthesis
-    .replace(/[^a-zA-Z0-9\-',"$: ]/g, '_') // replace special characters with underscores 
-    .replace(/\s+/g, ' ')         // replace multiple spaces with a space
-    .trim();
+const processVideoTitle = (title, removeSubtext) => {
+  if (removeSubtext) {
+    title = title.replace(/(\[.*?\]|\(.*?\))/g, '') // optionally remove any text in brackets or parenthesis
+  }
+  return title.replace(/[^a-zA-Z0-9\-',"$: ]/g, '_') // replace special characters with underscores 
+    .replace(/\s+/g, ' ') // replace multiple spaces with a space
+    .trim(); //remove trailing and leading whitespace
 };
 
 const getTitle = (url) => {
@@ -196,18 +181,50 @@ const getTitle = (url) => {
   });
 }
 
+const getTitlewShazam = (tempFile, url) => {
+  return new Promise((resolve, reject) => {
+    console.log('getting title with shazam...');
+    // shazam song recognition
+    shazam.recognise(tempFile, 'en-US').then(async (result) => {
+      if (result) {
+        const newTitle = result.track.subtitle + ' - ' + result.track.title;
+        console.log('found song: ' + newTitle + ' | link: ' + result.track.url);
+        return resolve(newTitle);
+      } else {
+        // no song found by shazam, fall back on using yt-dlp to fetch the title
+        console.log('No song found by shazam! Fetching yt title...')
+        const yt_title = await getTitle(url)
+        console.log('found yt-title: ' + yt_title);
+        return resolve(yt_title);
+      }
+    });
+  });
+}
+
+function processFFMPEGLine(newFile, url, lines, totalDuration, timestamp) {
+  for (let i = 0; i < lines.length - 1; i++) {
+    const line = lines[i];
+    const [key, value] = line.split('=');
+    if (key && value) {
+      if (key.trim() === 'out_time_ms') {
+        const currentTime = parseInt(value.trim(), 10) / 1000000;
+        const progressPercentage = (currentTime / totalDuration) * 100;
+
+        console.log(`Progress: ${progressPercentage.toFixed(2)}%`);
+
+        const message = { progress: progressPercentage.toFixed(2), status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile };
+        broadcastProgress(message)
+      }
+    }
+  }
+}
 
 // endpoint to handle download requests
 app.post('/download', async (req, res) => {
-  console.log('downloading file...');
-
   const { url, format, gdrive, timestamp, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext, normalizeAudio, useShazam } = req.body;
   updatePaths(outputPath);
+  console.log('downloading url: ' + url);
 
-  console.log('download link: ' + url);
-
-  const cleanedTitle = processVideoTitle(await getTitle(url));
-  console.log('cleaned title: ' + cleanedTitle)
 
   if (!url) {
     console.log('err - no URL!')
@@ -215,15 +232,14 @@ app.post('/download', async (req, res) => {
   }
 
 
-  //rename the file
-  let newFile = cleanedTitle + '.' + format;
-  let filePath = downloadsPath + '\\' + newFile;
-  console.log('new file: ' + newFile);
+  // Uniquely name the temp file using the timestamp
+  let tempFile = Date.parse(timestamp) + '.' + format;
+  let tempFilePath = downloadsPath + '\\' + tempFile;
+  console.log('temp file: ' + tempFile);
 
 
   // Construct yt-dlp command arguments
-  let args = [`"${url}"`, '-o', `"${filePath}"`];
-  console.log('format: ' + format)
+  let args = [`"${url}"`, '-o', `"${tempFilePath}"`];
 
   if (format === 'mp4') {
     args.push('-f', 'bv+ba/b', '--merge-output-format', 'mp4');
@@ -242,19 +258,22 @@ app.post('/download', async (req, res) => {
     }
   );
 
-  // normalize the yt-dlp audio when the download is done? Need to change original download path, and very time consuming:
-  // ffmpeg -i "C:\Users\andre\Downloads\streaming\downloads\Moore_s_Law_is_Dead_Welcome_to_Light_Speed_Computers.mp4" -af "loudnorm=I=-16:TP=-1.5:LRA=11" -c:v copy "C:\Users\andre\Downloads\streaming\downloads\Moore_s_Law_is_Dead_Welcome_to_Light_Speed_Computers_new.mp4"
 
-  activeProcesses[timestamp] = { process: ytDlpProcess, fileName: newFile }
+  let titlePromise = null
+  if (!useShazam) {
+    titlePromise = getTitle(url);
+  }
+
+  activeProcesses[timestamp] = { process: ytDlpProcess, fileName: 'fetching...' }
 
   // Listen to yt-dlp stderr for debugging
-  ytDlpProcess.stderr.on('data', (data) => {
-    const lines = data.toString().split('\n');
+  // ytDlpProcess.stderr.on('data', (data) => {
+  //   const lines = data.toString().split('\n');
 
-    lines.forEach(line => {
-      console.log('stderr: ' + line)
-    });
-  });
+  //   lines.forEach(line => {
+  //     console.log('stderr: ' + line)
+  //   });
+  // });
 
   // Listen to yt-dlp stdout for progress updates
   ytDlpProcess.stdout.on('data', (data) => {
@@ -269,7 +288,7 @@ app.post('/download', async (req, res) => {
         console.log('download progress: ' + progressPercent);
 
         // Broadcast progress to clients with timestamp
-        const message = { progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile };
+        const message = { progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp, fileName: 'fetching...' };
         broadcastProgress(message)
       }
     });
@@ -277,6 +296,22 @@ app.post('/download', async (req, res) => {
 
 
   ytDlpProcess.on('close', async (code) => {
+    let cleanedTitle = '';
+    if (useShazam) {
+      if (normalizeAudio) {
+        cleanedTitle = Date.parse(timestamp) + '_normalized';
+      } else {
+        cleanedTitle = Date.parse(timestamp);
+      }
+    } else {
+      cleanedTitle = processVideoTitle(await titlePromise, removeSubtext);
+      console.log(' ------------- cleaned title: ' + cleanedTitle)
+    }
+
+    let newFile = cleanedTitle + '.' + format;
+    let filePath = downloadsPath + '\\' + newFile;
+
+
     if (code !== 0) {
       console.error(`error: yt-dlp exited with code ${code}`);
       res.send({ message: 'failure', file: url, timestamp: timestamp });
@@ -288,24 +323,131 @@ app.post('/download', async (req, res) => {
       return;
     }
 
-
-    // upload to google drive if necessary
-    if (gdrive) {
-      const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath);
-
-      console.log('Uploading to gdrive', newFile);
-      uploadFile(filePath, newFile, drive, gdriveFolderID);
+    // start the shazam call
+    let shazamPromise = null;
+    if (useShazam) {
+      shazamPromise = getTitlewShazam(tempFilePath, url);
     }
 
+    //optionally normalize the audio
+    if (normalizeAudio) {
+      const totalDuration = await getTotalDuration(tempFilePath);
+      console.log('totalDuration: ' + totalDuration);
 
-    // send completion message to client and service worker
-    console.log(`yt-dlp completed successfully.`);
-    res.send({ message: 'success', file: url, timestamp: timestamp, fileName: newFile });
+      //normalize the audio and save it to the new path (renaming it)
+      let ffmpegArgs = [
+        '-i', tempFilePath,
+        '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
+        '-c:v', 'copy',  //copy video stream without re-encoding
+        '-c:a', 'aac',  // re-encode audio to aac
+        filePath,
+        '-threads', `${os.cpus().length - 1}`,
+        '-progress', 'pipe:1',
+        '-nostats']
 
-    broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed', fileName: newFile });
+      const ffmpegProcess = spawn('ffmpeg', ffmpegArgs);
+
+      activeProcesses[timestamp] = { process: ffmpegProcess, fileName: newFile }
+
+      let progressData = '';
+
+      ffmpegProcess.stdout.on('data', (chunk) => {
+        progressData += chunk.toString();
+
+        // iterate over data's lines
+        const lines = progressData.split('\n');
+        processFFMPEGLine(newFile, url, lines, totalDuration, timestamp);
+        progressData = lines[lines.length - 1];
+      });
+
+      //stderr output for debugging
+      ffmpegProcess.stderr.on('data', (data) => {
+        console.error(`stderr: ${data}`);
+      });
+
+      ffmpegProcess.on('close', async (code) => {
+        console.log(`ffmpeg exited with code ${code}`);
+        if (code !== 0) {
+          //clean up cached files
+          clearCache(cleanedTitle);
+          delete activeProcesses[timestamp];
+
+          // notify clients of error
+          const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile };
+          broadcastProgress(errorMessage);
+          res.send(errorMessage);
+          return;
+        } else {
+          // rename the file with shazam API from gettitlewshazam
+          if (useShazam && shazamPromise) {
+            let shazamTitle = await shazamPromise;
+            shazamTitle = processVideoTitle(shazamTitle);
+
+            console.log('got title with shazam: ' + shazamTitle);
+            let newShazamPath = downloadsPath + '\\' + shazamTitle + '.' + format;
+
+            //rename normalized file with path from shazam
+            fs.renameSync(filePath, newShazamPath);
+
+            newFile = shazamTitle + '.' + format;
+            filePath = newShazamPath;
+          }
 
 
-    delete activeProcesses[timestamp];
+          // upload to google drive if necessary
+          if (gdrive) {
+            const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath);
+
+            console.log('Uploading to gdrive', newFile);
+            uploadFile(filePath, newFile, drive, gdriveFolderID);
+          }
+
+          //delete the file
+          deleteFileIfExists(tempFilePath)
+
+          // send completion message to client and service worker
+          console.log(`yt-dlp completed successfully.`);
+          res.send({ message: 'success', file: url, timestamp: timestamp, fileName: newFile });
+          broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed', fileName: newFile });
+          delete activeProcesses[timestamp];
+        }
+      });
+
+
+
+    } else {
+      // rename the file with shazam API from gettitlewshazam or rename it with ytdlp
+      if (useShazam && shazamPromise) {
+        let shazamTitle = await shazamPromise;
+        console.log('got title with shazam: ' + shazamTitle);
+        let newShazamPath = downloadsPath + '\\' + shazamTitle + '.' + format;
+
+        fs.renameSync(tempFilePath, newShazamPath);
+
+        newFile = shazamTitle + '.' + format;
+        filePath = newShazamPath;
+
+      } else {
+        // rename the file to the title fetched by yt-dlp
+        fs.renameSync(tempFilePath, filePath);
+      }
+
+
+
+      // upload to google drive if necessary
+      if (gdrive) {
+        const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath);
+
+        console.log('Uploading to gdrive', newFile);
+        uploadFile(filePath, newFile, drive, gdriveFolderID);
+      }
+
+      // send completion message to client and service worker
+      console.log(`yt-dlp completed successfully.`);
+      res.send({ message: 'success', file: url, timestamp: timestamp, fileName: newFile });
+      broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed', fileName: newFile });
+      delete activeProcesses[timestamp];
+    }
   });
 
   ytDlpProcess.on('error', (error) => {
@@ -318,17 +460,21 @@ app.post('/download', async (req, res) => {
 
 function getTotalDuration(input) {
   return new Promise((resolve, reject) => {
-    const cmd = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${input}"`;
-    exec(cmd, (err, stdout, stderr) => {
-      if (err) {
-        console.error('Error executing ffprobe:', stderr);
-        reject(err);
-        return;
-      }
-      const duration = parseFloat(stdout.trim());
-      console.log('Duration:', duration);
-      resolve(duration);
-    });
+    try {
+      const cmd = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${input}"`;
+      exec(cmd, (err, stdout, stderr) => {
+        if (err) {
+          console.error('Error executing ffprobe:', stderr);
+          resolve('-1');
+          return;
+        }
+        const duration = parseFloat(stdout.trim());
+        console.log('Duration:', duration);
+        resolve(duration);
+      });
+    } catch (e) {
+      console.log('error in getTotalDuration: ' + e.message);
+    }
   });
 }
 
@@ -337,47 +483,73 @@ function getTotalDuration(input) {
 app.post('/download_m3u8', async (req, res) => {
   console.log('downloading m3u8 file...');
 
-  const { link, timestamp, title, outputPath, gdrive, gdriveKeyPath, gdriveFolderID, normalizeAudio } = req.body;
+  const { link, timestamp, title, outputPath, gdrive, gdriveKeyPath, gdriveFolderID, normalizeAudio, downloadm3u8 } = req.body;
   updatePaths(outputPath)
 
-  // const fileName = title + '--' + Date.parse(timestamp);
+
   const m3u8Name = title + '.m3u8';
-  const errorMessage = { progress: 0, timestamp: timestamp, file: link, status: 'error', fileName: m3u8Name };
+
+  let mp4Output = `${title}.mp4`;
+  let output_file = `${downloadsPath}/${mp4Output}`;
 
 
-  // download the m3u8 file locally first
-  let m3u8Response = null;
-  try {
-    m3u8Response = await axios.get(link, { responseType: 'text', timeout: 10000 });
-    if (!m3u8Response) {
-      console.log('error getting m3u8: no response')
-      // notify clients of error
-      broadcastProgress(errorMessage)
+  const errorMessage = { progress: 0, timestamp: timestamp, file: link, status: 'error', fileName: mp4Output };
+
+
+  // optionally download the m3u8 file locally first
+  let m3u8Location = '';
+
+  if (downloadm3u8) {
+    m3u8Location = `${m3u8Path}\\${m3u8Name}`;
+
+    // keep renaming the file if it exists at location
+    let index = 1;
+    while (fs.existsSync(m3u8Location)) {
+      m3u8Location = `${m3u8Path}\\${m3u8Name}_${index}`;
+      index++;
+    }
+
+    //deleteFileIfExists(m3u8Location);
+
+    let m3u8Response = null;
+    try {
+      m3u8Response = await axios.get(link, { responseType: 'text', timeout: 10000 });
+      if (!m3u8Response) {
+        console.log('error getting m3u8: no response')
+        // notify clients of error
+        broadcastProgress(errorMessage)
+        res.send(errorMessage)
+        return;
+      }
+    } catch (e) {
+      console.log('error getting m3u8: ' + e.message)
+      broadcastProgress(errorMessage);
       res.send(errorMessage)
       return;
     }
-  } catch (e) {
-    console.log('error getting m3u8: ' + e.message)
-    broadcastProgress(errorMessage);
-    res.send(errorMessage)
-    return;
+
+    const m3u8Content = m3u8Response.data;
+    // Save the .m3u8 file locally
+    try {
+      fs.writeFileSync(m3u8LocalPath, m3u8Content, 'utf8');
+    } catch (e) {
+      console.log('error saving m3u8 file locally: ' + e.message);
+      broadcastProgress(errorMessage);
+      res.send(errorMessage)
+      return;
+    }
+  } else {
+    m3u8Location = link;
   }
 
-  const m3u8Content = m3u8Response.data;
-  // Save the .m3u8 file locally
-  const m3u8LocalPath = `${m3u8Path}\\${m3u8Name}`;
-  try {
-    fs.writeFileSync(m3u8LocalPath, m3u8Content, 'utf8');
-  } catch (e) {
-    console.log('error saving m3u8 file locally: ' + e.message);
-    broadcastProgress(errorMessage);
-    res.send(errorMessage)
-    return;
+
+  //keep renaming the mp4 output until it doesnt already exist
+  let index = 1;
+  while (fs.existsSync(output_file)) {
+    mp4Output = `${title}_${index}.mp4`;
+    output_file = `${downloadsPath}/${mp4Output}`;
+    index++;
   }
-
-  const mp4Output = `${title}.mp4`
-
-  const output_file = `${downloadsPath}/${mp4Output}`
 
   const totalDuration = await getTotalDuration(link);
   console.log('total duration (in seconds) of the file: ' + totalDuration)
@@ -386,19 +558,23 @@ app.post('/download_m3u8', async (req, res) => {
   //execute the ffmpeg command that will download and convert the m3u8 file to an mp4 file:
   //ffmpeg -protocol_whitelist "file,http,https,tcp,tls" -i "<m3u8_link>" -c copy <output_file>.mp4 -progress pipe:1 -nostats 
   console.log('number of cores detected: ' + os.cpus().length)
-  const ffmpegProcess = spawn('ffmpeg', [
-    '-protocol_whitelist', 'file,http,https,tcp,tls',
-    '-i', m3u8LocalPath,
-    '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11', // normalize audio
+
+  let ffmpegArgs = ['-protocol_whitelist', 'file,http,https,tcp,tls',
+    '-i', m3u8Location,
     '-c:v', 'copy',  //copy video stream without re-encoding
     '-c:a', 'aac',  // re-encode audio to aac
     output_file,
     '-threads', `${os.cpus().length - 1}`,
     '-progress', 'pipe:1',
-    '-nostats',
-  ]);
+    '-nostats']
 
-  activeProcesses[timestamp] = { process: ffmpegProcess, fileName: m3u8Name }
+  if (normalizeAudio) {
+    ffmpegArgs.push('-af', 'loudnorm=I=-16:TP=-1.5:LRA=11'); //optionally normalize the audio
+  }
+
+  const ffmpegProcess = spawn('ffmpeg', ffmpegArgs);
+
+  activeProcesses[timestamp] = { process: ffmpegProcess, fileName: mp4Output }
 
   let progressData = '';
 
@@ -407,22 +583,7 @@ app.post('/download_m3u8', async (req, res) => {
 
     // iterate over data's lines
     const lines = progressData.split('\n');
-    for (let i = 0; i < lines.length - 1; i++) {
-      const line = lines[i];
-      const [key, value] = line.split('=');
-      if (key && value) {
-        if (key.trim() === 'out_time_ms') {
-          const currentTime = parseInt(value.trim(), 10) / 1000000;
-          const progressPercentage = (currentTime / totalDuration) * 100;
-
-          console.log(`Progress: ${progressPercentage.toFixed(2)}%`);
-
-          const message = { progress: progressPercentage.toFixed(2), status: 'in-progress', file: link, timestamp: timestamp, fileName: m3u8Name };
-          broadcastProgress(message)
-        }
-      }
-    }
-
+    processFFMPEGLine(mp4Output, link, lines, totalDuration, timestamp);
     progressData = lines[lines.length - 1];
   });
 
@@ -435,13 +596,12 @@ app.post('/download_m3u8', async (req, res) => {
     console.log(`ffmpeg exited with code ${code}`);
     if (code !== 0) {
       // notify clients of error
-      const message = { progress: 0, timestamp: timestamp, file: link, status: 'error', fileName: m3u8Name };
+      const message = { progress: 0, timestamp: timestamp, file: link, status: 'error', fileName: mp4Output };
       broadcastProgress(message)
 
       //clean up cached files
-      clearCache(title)
+      clearCache(mp4Output);
     } else {
-
       if (gdrive) {
         const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath);
         console.log('Uploading to gdrive', mp4Output);
@@ -449,7 +609,7 @@ app.post('/download_m3u8', async (req, res) => {
       }
 
       // download completed successfully
-      broadcastProgress({ timestamp: timestamp, file: link, progress: 100, status: 'completed', fileName: m3u8Name });
+      broadcastProgress({ timestamp: timestamp, file: link, progress: 100, status: 'completed', fileName: mp4Output });
     }
 
     delete activeProcesses[timestamp];
@@ -583,13 +743,23 @@ app.post('/clear', (req, res) => {
     // clear local downloads folder
     fs.emptyDir(downloadsPath)
       .then(() => {
-        console.log('cleared local folder')
-        res.send({ message: 'success' });
+        console.log('cleared downloads folder')
+        fs.emptyDir(m3u8Path)
+          .then(() => {
+            console.log('cleared m3u8 folder')
+            res.send({ message: 'success' });
+          })
+          .catch(err => {
+            console.log("Error clearing m3u8 folder:", err);
+            res.send({ message: 'error' });
+          });
       })
       .catch(err => {
-        console.log("Error clearing local folder:", err);
+        console.log("Error clearing downloads folder:", err);
         res.send({ message: 'error' });
       });
+
+
   } else if (type === 'gdrive-downloads') {
     const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath);
     // clear gdrive downloads folder (only files that the bot uploaded)

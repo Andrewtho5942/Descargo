@@ -317,7 +317,6 @@ function App() {
 
   const download_m3u8 = (link, title, index) => {
     const timestamp = new Date().toISOString();
-    const name = title + '--' + Date.parse(timestamp);
     // set the background to green
 
     setM3u8bg((prevbgs) => {
@@ -341,12 +340,13 @@ function App() {
         },
         link: link,
         timestamp: timestamp,
-        title: name,
+        title: title,
         outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
         gdrive: popupSettings[1],
         gdriveKeyPath: settingsRef.current.find(s => s.key === 'gdriveJSONKey').value,
         gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value,
-        normalizeAudio: settingsRef.current.find(s => s.key === 'normalizeAudio').value
+        normalizeAudio: settingsRef.current.find(s => s.key === 'normalizeAudio').value,
+        downloadm3u8: settingsRef.current.find(s => s.key === 'downloadm3u8').value,
       }).then((result) => {
         if (result.data.status === 'error') {
           //update the history if it times out
@@ -362,8 +362,7 @@ function App() {
           });
         }
       });
-      console.log('name: ' + name)
-      addToHistory(link, name + '.m3u8', 0, timestamp, 'in-progress');
+      addToHistory(link, title + '.mp4', 0, timestamp, 'in-progress');
     } catch (error) {
       console.error('Error:', error);
     }
@@ -671,9 +670,10 @@ function App() {
               }
             })
             }
-            {(m3u8Links.length === 0) && <div className='menu-empty'> No m3u8 links detected from GET requests! </div>}
           </tbody>
         </table>
+        {(m3u8Links.length === 0) && <div className='menu-empty'> No m3u8 links detected! </div>}
+
       </div>
 
       <div className={`history-menu collapsible-menu ${historyOpen ? 'open' : 'closed'}`} tabIndex="-1">
@@ -715,9 +715,9 @@ function App() {
             })
             }
           </tbody>
-          {(history.length === 0) && <div className='menu-empty'> No history found! </div>}
-
         </table>
+        {(history.length === 0) && <div className='menu-empty'> No history found! </div>}
+
       </div>
     </div >
   );

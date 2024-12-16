@@ -86,9 +86,9 @@ eventSource.onmessage = (event) => {
                 console.log('pulled settings: ');
                 console.log(result.settings)
 
-                if ((result.settings.find(s => s.key === 'm3u8Notifs').value && data.fileName.endsWith('.m3u8')) ||
+                if ((result.settings.find(s => s.key === 'm3u8Notifs').value && data.file.endsWith('.m3u8')) ||
                     (result.settings.find(s => s.key === 'm4aNotifs').value && data.fileName.endsWith('.m4a')) ||
-                    (result.settings.find(s => s.key === 'mp4Notifs').value && data.fileName.endsWith('.mp4'))) {
+                    (result.settings.find(s => s.key === 'mp4Notifs').value && (data.fileName.endsWith('.mp4') && !data.file.endsWith('.m3u8')))) {
                     console.log('download finished!');
                     browser.notifications.create({
                         type: 'basic',
@@ -112,9 +112,9 @@ eventSource.onmessage = (event) => {
                 console.log('pulled settings: ');
                 console.log(result.settings)
                 if (result.settings.find(s => s.key === 'failureNotifs').value) {
-                    if ((result.settings.find(s => s.key === 'm3u8Notifs').value && data.fileName.endsWith('.m3u8')) ||
+                    if ((result.settings.find(s => s.key === 'm3u8Notifs').value && data.link.endsWith('.m3u8')) ||
                         (result.settings.find(s => s.key === 'm4aNotifs').value && data.fileName.endsWith('.m4a')) ||
-                        (result.settings.find(s => s.key === 'mp4Notifs').value && data.fileName.endsWith('.mp4'))) {
+                        (result.settings.find(s => s.key === 'mp4Notifs').value && (data.fileName.endsWith('.mp4') && !data.link.endsWith('.m3u8')))) {
                         console.log('download failed!');
                         browser.notifications.create({
                             type: 'basic',

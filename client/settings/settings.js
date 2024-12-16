@@ -8,6 +8,7 @@ settings = [
   { key: "mp4Notifs", value: true },
   { key: "m4aNotifs", value: false },
   { key: "failureNotifs", value: false },
+  { key: "playlistNotifs", value: false },
 
   { key: "outputPath", value: 'C:\\Users\\andre\\Downloads\\Descargo' },
   { key: "removeSubtext", value: true },
@@ -16,6 +17,7 @@ settings = [
   { key: "useShazam", value: false },
   { key: "gdriveJSONKey", value: 'C:\\Users\\andre\\OneDrive\\Documents\\Webdev\\descargo\\server\\keys\\yt-dl-443015-d39da117fe4a.json' },
   { key: "gdriveFolderID", value: '17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q' },
+  { key: "downloadm3u8", value: false },
 
   { key: "submitHotkey", value: 'Enter' },
   { key: "formatHotkey", value: 'p' },
