@@ -13,19 +13,31 @@ import explorer from './images/fe.png';
 import disconnect from './images/disconnect.png'
 import settingsIcon from './images/settings.png'
 
-const defaultSettings = [
-  { key: "m3u8Notifs", value: true },
-  { key: "m4aNotifs", value: false },
-  { key: "mp4Notifs", value: false },
-  { key: "AHKPath", value: '' },
-  { key: "darkMode", value: true },
 
-  { key: "downloadsPath", value: '' },
+const defaultSettings = [
+  { key: "AHKPath", value: '' },
+  { key: "focusExplorerPath", value: '' },
+  { key: "darkMode", value: true },
+  { key: "cloudMode", value: false },
+
+  { key: "m3u8Notifs", value: true },
+  { key: "mp4Notifs", value: true },
+  { key: "m4aNotifs", value: false },
+  { key: "failureNotifs", value: false },
+  { key: "playlistNotifs", value: false },
+
+  { key: "outputPath", value: '' },
   { key: "removeSubtext", value: true },
   { key: "normalizeAudio", value: true },
   { key: "playlistLink", value: '' },
   { key: "useShazam", value: false },
+  { key: "downloadm3u8", value: false },
 
+  { key: "gdriveJSONKey", value: '' },
+  { key: "gdriveFolderID", value: '' },
+  { key: "cookiePath", value: '' },
+
+  { key: "submitHotkey", value: 'Enter' },
   { key: "formatHotkey", value: 'p' },
   { key: "gdriveHotkey", value: 'g' },
   { key: "getMenuHotkey", value: 'n' },
@@ -33,9 +45,8 @@ const defaultSettings = [
   { key: "openClearHotkey", value: 'o' },
   { key: "backHotkey", value: 'Backspace' },
   { key: "autofillHotkey", value: 'f' },
-  { key: "settingsHotkey", value: 's' }
+  { key: "settingsHotkey", value: 's' },
 ]
-
 
 function App() {
 
@@ -59,8 +70,7 @@ function App() {
 
 
   const historyRef = useRef(history);
-  const linkRef = useRef(popupSettings[2]);
-  const videoFormatRef = useRef(popupSettings[0]);
+  const popupSettingsRef = useRef(popupSettings);
   const settingsRef = useRef(settings);
 
   //update the useRefs
@@ -68,11 +78,8 @@ function App() {
     historyRef.current = history;
   }, [history]);
   useEffect(() => {
-    videoFormatRef.current = popupSettings[0];
-  }, [popupSettings[0]]);
-  useEffect(() => {
-    linkRef.current = popupSettings[2];
-  }, [popupSettings[2]]);
+    popupSettingsRef.current = popupSettings;
+  }, [popupSettings]);
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
@@ -342,7 +349,7 @@ function App() {
         timestamp: timestamp,
         title: title,
         outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
-        gdrive: popupSettings[1],
+        gdrive: popupSettingsRef.current[1],
         gdriveKeyPath: settingsRef.current.find(s => s.key === 'gdriveJSONKey').value,
         gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value,
         normalizeAudio: settingsRef.current.find(s => s.key === 'normalizeAudio').value,
@@ -407,31 +414,32 @@ function App() {
 
   const submitLink = () => {
     setResult('loading');
-    if (!linkRef.current) {
+    if (!popupSettingsRef.current[2]) {
       setResult('failure');
       return;
     }
 
     try {
       const timestamp = new Date().toISOString();
-      const format = videoFormatRef.current ? 'mp4' : 'm4a';
+      const format = popupSettingsRef.current[0] ? 'mp4' : 'm4a';
 
-      addToHistory(linkRef.current, 'fetching title... ', 0, timestamp, 'in-progress');
+      addToHistory(popupSettingsRef.current[2], 'fetching title... ', 0, timestamp, 'in-progress');
       console.log('outputPath: ' + settingsRef.current.find(s => s.key === 'outputPath').value)
       axios.post(`${serverURL}/download`, {
         headers: {
           'ngrok-skip-browser-warning': '1'
         },
-        url: linkRef.current,
+        url: popupSettingsRef.current[2],
         format: format,
-        gdrive: popupSettings[1],
+        gdrive: popupSettingsRef.current[1],
         timestamp: timestamp,
         outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
         gdriveKeyPath: settingsRef.current.find(s => s.key === 'gdriveJSONKey').value,
         gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value,
         removeSubtext: settingsRef.current.find(s => s.key === 'removeSubtext').value,
         normalizeAudio: settingsRef.current.find(s => s.key === 'normalizeAudio').value,
-        useShazam: settingsRef.current.find(s => s.key === 'useShazam').value
+        useShazam: settingsRef.current.find(s => s.key === 'useShazam').value,
+        cookiePath: settingsRef.current.find(s => s.key === 'cookiePath').value,
       }).then((response) => {
         console.log('download response: ')
         console.log(response.data.message)
@@ -576,7 +584,7 @@ function App() {
 
       <input
         type="text"
-        value={popupSettings[2]}
+        value={popupSettingsRef.current[2]}
         onChange={(e) => { updateLink(e) }}
         placeholder="Enter YouTube URL"
         className="link-input"
@@ -585,8 +593,8 @@ function App() {
       <div className='autofill-btn' onClick={() => { autofillLink() }}>fill</div>
 
 
-      <label className={`format checkbox-container ${popupSettings[0] ? 'active' : ''}`}>
-        <input type="checkbox" checked={popupSettings[0]} onChange={() => {
+      <label className={`format checkbox-container ${popupSettingsRef.current[0] ? 'active' : ''}`}>
+        <input type="checkbox" checked={popupSettingsRef.current[0]} onChange={() => {
           setPopupSettings((prevSettings) => {
             storePopupSettings([!prevSettings[0], prevSettings[1], prevSettings[2]]);
             return ([!prevSettings[0], prevSettings[1], prevSettings[2]]);
@@ -605,8 +613,8 @@ function App() {
       }
 
 
-      <label className={`gdrive checkbox-container ${popupSettings[1] ? 'active' : ''}`}>
-        <input type="checkbox" checked={popupSettings[1]} onChange={() => {
+      <label className={`gdrive checkbox-container ${popupSettingsRef.current[1] ? 'active' : ''}`}>
+        <input type="checkbox" checked={popupSettingsRef.current[1]} onChange={() => {
           setPopupSettings((prevSettings) => {
             storePopupSettings([prevSettings[0], !prevSettings[1], prevSettings[2]]);
             return ([prevSettings[0], !prevSettings[1], prevSettings[2]]);

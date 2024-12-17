@@ -1,8 +1,13 @@
-settings = [
+
+const ISLOCAL = true;
+const SERVER_PORT = 5001;
+const serverURL = ISLOCAL ? `http://localhost:${SERVER_PORT}` : "https://3a51-156-146-107-197.ngrok-free.app";
+
+let settings = [
   { key: "AHKPath", value: 'C:\\Program Files\\AutoHotkey\\v2\\AutoHotkey.exe' },
   { key: "focusExplorerPath", value: 'C:\\Users\\andre\\focusExplorer.ahk' },
   { key: "darkMode", value: true },
-  { key: "cloudMode", value: false},
+  { key: "cloudMode", value: false },
 
   { key: "m3u8Notifs", value: true },
   { key: "mp4Notifs", value: true },
@@ -15,9 +20,11 @@ settings = [
   { key: "normalizeAudio", value: true },
   { key: "playlistLink", value: '' },
   { key: "useShazam", value: false },
+  { key: "downloadm3u8", value: false },
+
   { key: "gdriveJSONKey", value: 'C:\\Users\\andre\\OneDrive\\Documents\\Webdev\\descargo\\server\\keys\\yt-dl-443015-d39da117fe4a.json' },
   { key: "gdriveFolderID", value: '17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q' },
-  { key: "downloadm3u8", value: false },
+  { key: "cookiePath", value: 'C:\Users\\andre\\OneDrive\\Documents\\cookies.txt' },
 
   { key: "submitHotkey", value: 'Enter' },
   { key: "formatHotkey", value: 'p' },
@@ -34,6 +41,7 @@ let storage = browser.storage.local;
 let inputElements = [];
 
 
+
 function setInputValues() {
   for (let i = 0; i < inputElements.length; i++) {
     let input = inputElements[i];
@@ -44,8 +52,8 @@ function setInputValues() {
         document.documentElement.setAttribute('data-theme', settings[i].value ? 'dark' : 'light')
       }
     } else if (input.classList.contains('text-input')) {
-      console.log('loading from storage:')
-      console.log(settings[i].value)
+      //console.log('loading from storage:')
+      //console.log(settings[i].value)
       input.value = settings[i].value;
     }
   }
@@ -61,7 +69,7 @@ function setHotkeyLabels() {
   for (let i = firstHotkeySetting; i < settings.length; i++) {
     //set the current hotkey setting to the label value
     hotkeyLabels[i - firstHotkeySetting].textContent = settings[i].value;
-    console.log('labeled hotkey ' + settings[i].key + ' as ' + settings[i].value);
+    //console.log('labeled hotkey ' + settings[i].key + ' as ' + settings[i].value);
   }
 }
 
@@ -109,7 +117,6 @@ document.addEventListener('DOMContentLoaded', () => {
           document.documentElement.setAttribute('data-theme', settings[i].value ? 'dark' : 'light')
         }
       });
-
 
     } else if (classes.contains('hotkey')) {
 
@@ -171,7 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
         })
       }
 
-      console.log('listening for key press to reassign ' + settings[i].key + '...')
+      //console.log('listening for key press to reassign ' + settings[i].key + '...')
 
       input.addEventListener('click', () => {
         if (input.checked) {
@@ -197,7 +204,6 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`Saved new value for ` + settings[i].key + `: ${newValue}`);
       });
     }
-
   }
 
   // add submit listeners for playlist-input
@@ -208,14 +214,36 @@ document.addEventListener('DOMContentLoaded', () => {
   function handleStartPlaylist(event) {
     event.preventDefault();
 
-
     console.log('starting playlist download: ' + playlistInput.value);
 
 
-    playlistInput.value = '';
-    settings.find(s => s.key === 'playlistLink').value = '';
-    storage.set({ ['settings']: settings });
+    //get the current popupSettings from local storage
+    storage.get("popupSettings", (result) => {
+      let popupSettings = result.popupSettings;
+      if (!popupSettings) {
+        popupSettings = [false, true]
+      }
+      // playlist request to the server
+      axios.post(`${serverURL}/playlist`, {
+        playlistURL: playlistInput.value,
+        format: result.popupSettings[0] ? 'mp4' : 'm4a',
+        gdrive: result.popupSettings[1],
+        outputPath: settings.find(s => s.key === 'outputPath').value,
+        gdriveKeyPath: settings.find(s => s.key === 'gdriveJSONKey').value,
+        gdriveFolderID: settings.find(s => s.key === 'gdriveFolderID').value,
+        removeSubtext: settings.find(s => s.key === 'removeSubtext').value,
+        normalizeAudio: settings.find(s => s.key === 'normalizeAudio').value,
+        useShazam: settings.find(s => s.key === 'useShazam').value,
+        cookiePath: settings.find(s => s.key === 'cookiePath').value,
+      }).then((result) => {
+        console.log('playlist download ended: ' + result.message);
+      });
 
+      // update the storage with the empty playlist value
+      playlistInput.value = '';
+      settings.find(s => s.key === 'playlistLink').value = '';
+      storage.set({ ['settings']: settings });
+    })
   }
 
   if (playlistForm) {

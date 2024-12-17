@@ -1,6 +1,8 @@
 
-
 const SERVER_PORT = 5001;
+let disconnected = true;
+browser.storage.local.set({ disconnect: true });
+
 
 function storeLink(link, title) {
     const timestamp = new Date().toISOString();
@@ -52,123 +54,135 @@ browser.webRequest.onBeforeRequest.addListener(
 );
 
 
+
+
+
+function sendNotification(result, data, title, message) {
+    if ((result.settings.find(s => s.key === 'm3u8Notifs').value && data.file.endsWith('.m3u8')) ||
+        (result.settings.find(s => s.key === 'm4aNotifs').value && data.fileName.endsWith('.m4a')) ||
+        (result.settings.find(s => s.key === 'mp4Notifs').value && (data.fileName.endsWith('.mp4') && !data.file.endsWith('.m3u8')))) {
+        browser.notifications.create({
+            type: 'basic',
+            iconUrl: 'icons/icon-48.png',
+            title: title,
+            message: message
+        }).then(() => {
+            console.log('notification created successfully.')
+        }).catch((e) => {
+            console.log('ERROR in notification: ' + e.message)
+        });
+    }
+}
+
+
 console.log('opening sse connection...')
 // Start the SSE connection
 const eventSource = new EventSource(`http://localhost:${SERVER_PORT}/progress`);
 
+const storageUpdateQueue = [];
+let isProcessingQueue = false;
+
+function enqueueStorageUpdate(updateFunc) {
+  storageUpdateQueue.push(updateFunc);
+  processStorageQueue();
+}
+
+function processStorageQueue() {
+  if (isProcessingQueue || storageUpdateQueue.length === 0) return;
+
+  isProcessingQueue = true;
+  const updateFunc = storageUpdateQueue.shift();
+
+  updateFunc().finally(() => {
+    isProcessingQueue = false;
+    processStorageQueue();
+  });
+}
 
 eventSource.onmessage = (event) => {
-    //set disconnect to false if its true in storage
-    browser.storage.local.get('disconnect').then((result) => {
-        if (result.disconnect) {
-            browser.storage.local.set({ disconnect: false }).then(() => {
-                console.log('reconnected to server')
-            });
-        }
-    });
-
-
     const data = JSON.parse(event.data);
-    // console.log('received message: ')
-    // console.log(data)
 
-    if ((data.progress != null) && (data.progress != undefined)) {
-        console.log('progress update: ' + data.progress)
+    //set disconnect to false if its true in storage
+    if (disconnected) {
+        browser.storage.local.set({ disconnect: false }).then(() => {
+            console.log('reconnected to server')
+        });
+        disconnected = false;
+    }
+
+
+    if ((data.progress !== null) && (data.progress !== undefined)) {
         let newStatus = data.status;
 
-
-        if ((data.progress == 100) && (data.status === 'completed')) {
-
-            console.log('data:')
-            console.log(data)
-
+        if ((data.progress === 100) && (data.status === 'completed')) {
+            console.log('DEBUG -_-_-_-_ RECEIVED COMPLETION BROADCAST: ' + data.fileName);
             browser.storage.local.get('settings').then((result) => {
-                console.log('pulled settings: ');
-                console.log(result.settings)
-
-                if ((result.settings.find(s => s.key === 'm3u8Notifs').value && data.file.endsWith('.m3u8')) ||
-                    (result.settings.find(s => s.key === 'm4aNotifs').value && data.fileName.endsWith('.m4a')) ||
-                    (result.settings.find(s => s.key === 'mp4Notifs').value && (data.fileName.endsWith('.mp4') && !data.file.endsWith('.m3u8')))) {
-                    console.log('download finished!');
-                    browser.notifications.create({
-                        type: 'basic',
-                        iconUrl: 'icons/icon-48.png',
-                        title: '✓ Descargo Finished',
-                        message: `Download of ${truncateString(data.fileName, 30)} Finished!`
-                    }).then(() => {
-                        console.log('notification created successfully.')
-                    }).catch((e) => {
-                        console.log('ERROR in notification: ' + e.message)
-                    });
-                }
-                newStatus = 'completed';
+                sendNotification(result, data, '✓ Descargo Finished', `Download of ${truncateString(data.fileName, 30)} Finished!`);
             });
-
+            newStatus = 'completed';
         }
 
         if (data.status === 'error') {
             console.error('An error occurred during download');
             browser.storage.local.get('settings').then((result) => {
-                console.log('pulled settings: ');
-                console.log(result.settings)
                 if (result.settings.find(s => s.key === 'failureNotifs').value) {
-                    if ((result.settings.find(s => s.key === 'm3u8Notifs').value && data.link.endsWith('.m3u8')) ||
-                        (result.settings.find(s => s.key === 'm4aNotifs').value && data.fileName.endsWith('.m4a')) ||
-                        (result.settings.find(s => s.key === 'mp4Notifs').value && (data.fileName.endsWith('.mp4') && !data.link.endsWith('.m3u8')))) {
-                        console.log('download failed!');
-                        browser.notifications.create({
-                            type: 'basic',
-                            iconUrl: 'icons/icon-48.png',
-                            title: '✘ Descargo Failed',
-                            message: `Download of ${truncateString(data.fileName, 30)} Failed!`
-                        }).then(() => {
-                            console.log('notification created successfully.')
-                        }).catch((e) => {
-                            console.log('ERROR in notification: ' + e.message)
-                        });
-                    }
+                    sendNotification(result, data, '✘ Descargo Failed', `Download of ${truncateString(data.fileName, 30)} Failed!`);
                 }
             });
             newStatus = 'error';
         }
 
-        browser.storage.local.get('history').then((result) => {
-            if (result.history) {
-                const updatedHistory = result.history.map(item => {
-                    if (item.timestamp === data.timestamp) {
-                        return { ...item, progress: data.progress, status: newStatus, fileName: data.fileName };
-                    }
-                    return { ...item };
-                });
+        // Enqueue the history update
+        enqueueStorageUpdate(async () => {
+            const result = await browser.storage.local.get('history');
+            const updatedHistory = result.history ? [...result.history] : [];
 
-                browser.storage.local.set({ history: updatedHistory }).then(() => {
-                    //console.log('set new history to storage.');
-                }).catch((e) => {
-                    console.log('error setting progress update to storage: ' + e);
-                });
-                browser.storage.local.set({ historyUpdater: Date.now() }).then(() => {
-                    //console.log('set new history to storage.');
-                });
+            // Update or add the item in history
+            const index = updatedHistory.findIndex(item => item.timestamp === data.timestamp);
+            if (index !== -1) {
+                updatedHistory[index] = { ...updatedHistory[index], progress: data.progress, status: newStatus, fileName: data.fileName };
             } else {
-                console.log('err: no history')
+                updatedHistory.unshift({
+                    timestamp: data.timestamp,
+                    progress: data.progress || 0,
+                    status: newStatus,
+                    fileName: data.fileName || 'unknown',
+                    file: data.file || 'unknown'
+                });
             }
 
-        });
-    };
 
-}
+
+            // Save the updated history back to storage
+            await browser.storage.local.set({ history: updatedHistory });
+
+            browser.storage.local.set({ historyUpdater: Date.now() })
+            console.log('Updated history in storage.');
+        });
+
+    } else if (data.status === 'playlist-complete') {
+        console.error('A playlist finished downloading!');
+        browser.storage.local.get('settings').then((result) => {
+            if (result.settings.find(s => s.key === 'playlistNotifs').value) {
+                sendNotification(result, data, '✓ Descargo Finished', `Download of ${truncateString(data.playlistName, 30)} Finished!`);
+            }
+        });
+    }
+};
+
+
+
 
 eventSource.onerror = (err) => {
     console.error('EventSource failed:', err);
-    //set disconnect to true if its false in storage
-    browser.storage.local.get('disconnect').then((result) => {
-        if (!result.disconnect) {
-            browser.storage.local.set({ disconnect: true }).then(() => {
-                console.log('disconnected from server')
-            });
-        }
-    });
 
+    //set disconnect to true if its false in storage
+    if (!disconnected) {
+        browser.storage.local.set({ disconnect: true }).then(() => {
+            console.log('disconnected from server')
+        });
+        disconnected = true;
+    }
 
     // set all of the status in-progress downloads to error
     browser.storage.local.get('history').then((result) => {
