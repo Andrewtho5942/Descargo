@@ -83,21 +83,22 @@ const storageUpdateQueue = [];
 let isProcessingQueue = false;
 
 function enqueueStorageUpdate(updateFunc) {
-  storageUpdateQueue.push(updateFunc);
-  processStorageQueue();
+    storageUpdateQueue.push(updateFunc);
+    processStorageQueue();
 }
 
 function processStorageQueue() {
-  if (isProcessingQueue || storageUpdateQueue.length === 0) return;
+    if (isProcessingQueue || storageUpdateQueue.length === 0) return;
 
-  isProcessingQueue = true;
-  const updateFunc = storageUpdateQueue.shift();
+    isProcessingQueue = true;
+    const updateFunc = storageUpdateQueue.shift();
 
-  updateFunc().finally(() => {
-    isProcessingQueue = false;
-    processStorageQueue();
-  });
+    updateFunc().finally(() => {
+        isProcessingQueue = false;
+        processStorageQueue();
+    });
 }
+
 
 eventSource.onmessage = (event) => {
     const data = JSON.parse(event.data);
@@ -117,7 +118,7 @@ eventSource.onmessage = (event) => {
         if ((data.progress === 100) && (data.status === 'completed')) {
             console.log('DEBUG -_-_-_-_ RECEIVED COMPLETION BROADCAST: ' + data.fileName);
             browser.storage.local.get('settings').then((result) => {
-                sendNotification(result, data, '✓ Descargo Finished', `Download of ${truncateString(data.fileName, 30)} Finished!`);
+                sendNotification(result, data, '✓ Descargo Finished', `Finished Downloading ${truncateString(data.fileName, 30)}`);
             });
             newStatus = 'completed';
         }
@@ -126,7 +127,7 @@ eventSource.onmessage = (event) => {
             console.error('An error occurred during download');
             browser.storage.local.get('settings').then((result) => {
                 if (result.settings.find(s => s.key === 'failureNotifs').value) {
-                    sendNotification(result, data, '✘ Descargo Failed', `Download of ${truncateString(data.fileName, 30)} Failed!`);
+                    sendNotification(result, data, '✘ Descargo Failed', `Failed Downloading ${truncateString(data.fileName, 30)}`);
                 }
             });
             newStatus = 'error';
@@ -135,13 +136,13 @@ eventSource.onmessage = (event) => {
         // Enqueue the history update
         enqueueStorageUpdate(async () => {
             const result = await browser.storage.local.get('history');
-            const updatedHistory = result.history ? [...result.history] : [];
+            let updatedHistory = result.history ? [...result.history] : [];
 
             // Update or add the item in history
             const index = updatedHistory.findIndex(item => item.timestamp === data.timestamp);
             if (index !== -1) {
                 updatedHistory[index] = { ...updatedHistory[index], progress: data.progress, status: newStatus, fileName: data.fileName };
-            } else {
+            } else if (newStatus !== 'error') {
                 updatedHistory.unshift({
                     timestamp: data.timestamp,
                     progress: data.progress || 0,
@@ -151,7 +152,9 @@ eventSource.onmessage = (event) => {
                 });
             }
 
-
+            if (updatedHistory.length > 25) {
+                updatedHistory = updatedHistory.slice(0, 25);
+            }
 
             // Save the updated history back to storage
             await browser.storage.local.set({ history: updatedHistory });
@@ -160,11 +163,22 @@ eventSource.onmessage = (event) => {
             console.log('Updated history in storage.');
         });
 
-    } else if (data.status === 'playlist-complete') {
-        console.error('A playlist finished downloading!');
+    } else if (data.status === 'playlist-completed') {
+        console.log('A playlist finished downloading!');
+
+        // create the playlist notification if its on
         browser.storage.local.get('settings').then((result) => {
             if (result.settings.find(s => s.key === 'playlistNotifs').value) {
-                sendNotification(result, data, '✓ Descargo Finished', `Download of ${truncateString(data.playlistName, 30)} Finished!`);
+                browser.notifications.create({
+                    type: 'basic',
+                    iconUrl: 'icons/icon-48.png',
+                    title: '✓ Descargo Finished',
+                    message: `Finished Downloading Playlist: ${truncateString(data.playlistName, 30)} !`
+                }).then(() => {
+                    console.log('notification created successfully.')
+                }).catch((e) => {
+                    console.log('ERROR in notification: ' + e.message)
+                });
             }
         });
     }

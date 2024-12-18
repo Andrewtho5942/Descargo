@@ -162,13 +162,20 @@ body {
     background-color: var(--container-bg);
     font-size: 1.2rem;
     color: var(--text-color-mute);
-    width: 100%;
     margin: 10px 20px;
     border: none;
     outline: 2px solid var(--background-color);
     transition: background-color 0.3s ease, color 0.3s ease, outline 0.3s ease;
 
     padding: 4px 6px;
+}
+
+.text-input:not(.small) {
+    width: 100%;
+}
+
+.text-input.small {
+    width: 50px;
 }
 
 .text-input:focus {

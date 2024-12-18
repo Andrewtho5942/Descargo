@@ -13,8 +13,9 @@ const { Shazam } = require('node-shazam');
 const shazam = new Shazam();
 
 
-const MAX_CONCURRENT_DOWNLOADS = 10
+let max_concurrent_downloads = 10;
 let num_downloads = 0;
+let abortAllPlaylists = false;
 
 let downloadsPath = "";
 let m3u8Path = "";
@@ -52,7 +53,7 @@ function deleteFileIfExists(path) {
     fs.unlinkSync(path);
     console.log('deleted the file: ' + path)
   } else {
-    console.log('delete file -- file does not exist: ' + path);
+    console.log('file does not already exist: ' + path);
   }
 }
 
@@ -102,10 +103,15 @@ async function uploadFile(filePath, fileName, drive, gdriveFolderID) {
           body: fs.createReadStream(filePath)
         },
         fields: 'id',
+      }).then(() => {
+        console.log('File uploaded successfully!');
+        resolve();
+        return;
+      }).catch((e) => {
+        console.error('Error uploading file:', error);
+        resolve();
+        return;
       });
-      console.log('File uploaded successfully!');
-      resolve();
-      return;
     } catch (error) {
       console.error('Error uploading file:', error);
       resolve();
@@ -156,67 +162,96 @@ function clearCache(fileName, timestamp) {
 }
 
 
-
 const processVideoTitle = (title, removeSubtext) => {
   if (removeSubtext) {
     title = title.replace(/(\[.*?\]|\(.*?\))/g, '') // optionally remove any text in brackets or parenthesis
   }
-  return title.replace(/[^a-zA-Z0-9\-',"$:'. ]/g, '_') // replace special characters with underscores 
+  return title.replace(/[^a-zA-Z0-9\-',"$'.()[\]*%#@!^{}<>+=&~`; ]/g, '_') // replace special characters with underscores 
     .replace(/\s+/g, ' ') // replace multiple spaces with a space
     .trim(); //remove trailing and leading whitespace
 };
 
-const getTitle = (url, cookiePath) => {
+const getTitle = (url, cookiePath, newFile, removeSubtext, format) => {
   return new Promise((resolve, reject) => {
-    try {
-      // Command to get the title
-      let command = `yt-dlp --get-title "${url}"`
+    getTitleMain(url, cookiePath, newFile, removeSubtext, format);
 
-      if (cookiePath) {
-        command += ` --cookies "${cookiePath.replace(/\\/g, '/')}"`;
+    function getTitleMain(url, cookiePath, newFile, removeSubtext, format) {
+      try {
+        // Command to get the title
+        let command = `yt-dlp --get-title "${url}" -f mhtml`
+
+        if (cookiePath) {
+          command += ` --cookies "${cookiePath.replace(/\\/g, '/')}"`;
+        }
+        console.log('getTitle command: ' + command)
+        exec(command, (error, stdout, stderr) => {
+          if (error) {
+            console.error(`get title Error: ${error.message}`);
+            if (cookiePath) {
+              //try again without cookies
+              getTitleMain(url, '', newFile, removeSubtext, format);
+              return;
+            }
+
+            newFile.value = 'unknown.' + format;
+            return resolve(newFile.value)
+          }
+          if (stderr) {
+            console.error(`get title stderr: ${stderr}`);
+          }
+          const title = stdout.trim();
+          const cleanedTitle = processVideoTitle(title, removeSubtext);
+          console.log('got processed YT title: ' + cleanedTitle);
+          newFile.value = cleanedTitle + '.' + format;
+
+          return resolve(newFile.value);
+        });
+      } catch (e) {
+        console.log('error getting title: ' + e.message)
+        if (cookiePath) {
+          //try again without cookies
+          getTitleMain(url, '', newFile, removeSubtext, format);
+          return;
+        }
+        newFile.value = 'unknown.' + format;
+        return resolve(newFile.value);
       }
-
-      exec(command, (error, stdout, stderr) => {
-        if (error) {
-          console.error(`Error: ${error.message}`);
-          return resolve('unknown')
-        }
-        if (stderr) {
-          console.error(`stderr: ${stderr}`);
-          return resolve('unknown')
-        }
-        const title = stdout.trim();
-        console.log('got title: ' + title);
-        return resolve(title);
-      });
-    } catch (e) {
-      console.log('error getting title: ' + e.message)
-      return resolve('unkown');
     }
+
   });
 }
 
-const getTitlewShazam = (tempFile, url, cookiePath) => {
+const getTitlewShazam = (tempFile, url, cookiePath, newFile, removeSubtext, format) => {
   return new Promise((resolve, reject) => {
     console.log('getting title with shazam...');
     // shazam song recognition
+
     shazam.recognise(tempFile, 'en-US').then(async (result) => {
       if (result) {
         const newTitle = result.track.subtitle + ' - ' + result.track.title;
-        console.log('found song: ' + newTitle + ' | link: ' + result.track.url);
-        return resolve(newTitle);
+
+        const processedTitle = processVideoTitle(newTitle, removeSubtext);
+        console.log('found song: ' + processedTitle + ' | link: ' + result.track.url);
+        newFile.value = processedTitle + '.' + format;
+        return resolve(newFile.value);
       } else {
         // no song found by shazam, fall back on using yt-dlp to fetch the title
         console.log('No song found by shazam! Fetching yt title...')
-        const yt_title = await getTitle(url, cookiePath)
-        console.log('found yt-title: ' + yt_title);
+        const yt_title = await getTitle(url, cookiePath, newFile, removeSubtext, format)
         return resolve(yt_title);
       }
+    }).catch(async (e) => {
+      console.log('ERROR getting title with shazam: ' + e.message);
+      console.log('using yt-dlp to fetch and clean the title...');
+
+      // fall back on using yt-dlp to fetch the title
+      const yt_title = await getTitle(url, cookiePath, newFile, removeSubtext, format);
+      return resolve(yt_title);
     });
   });
 }
 
-function processFFMPEGLine(newFile, url, lines, totalDuration, timestamp) {
+function processFFMPEGLine(fileName, url, lines, totalDuration, timestamp) {
   for (let i = 0; i < lines.length - 1; i++) {
     const line = lines[i];
     const [key, value] = line.split('=');
@@ -225,9 +260,9 @@ function processFFMPEGLine(newFile, url, lines, totalDuration, timestamp) {
         const currentTime = parseInt(value.trim(), 10) / 1000000;
         const progressPercentage = (currentTime / totalDuration) * 100;
 
-        console.log(`Progress: ${progressPercentage.toFixed(2)}%`);
+        console.log(`ffmpeg progress: ${progressPercentage.toFixed(2)}%`);
 
-        const message = { progress: progressPercentage.toFixed(2), status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile };
+        const message = { progress: progressPercentage.toFixed(2), status: 'in-progress', file: url, timestamp: timestamp, fileName: fileName };
         broadcastProgress(message)
       }
     }
@@ -236,279 +271,317 @@ function processFFMPEGLine(newFile, url, lines, totalDuration, timestamp) {
 
 function ytdlpDownload(bodyObject) {
   num_downloads++;
+
   return new Promise((resolve, reject) => {
+    ytdlpMain(bodyObject);
 
-    const { url, format, gdrive, timestamp, outputPath, gdriveKeyPath, gdriveFolderID,
-      removeSubtext, normalizeAudio, useShazam, cookiePath } = bodyObject;
-    updatePaths(outputPath);
-    console.log('downloading url: ' + url);
+    // wrap the main process in another function to enable retries on error
+    function ytdlpMain(bodyObjectInner) {
+      console.log('ytdlpMain arguments:');
+      console.log(bodyObjectInner);
 
+      const { url, format, gdrive, timestamp, outputPath, gdriveKeyPath, gdriveFolderID,
+        removeSubtext, normalizeAudio, useShazam, cookiePath, maxDownloads } = bodyObjectInner;
 
-    if (!url) {
-      console.log('err - no URL!')
-      resolve({ error: 'YouTube URL is required.' })
-      return;
-    }
+      max_concurrent_downloads = maxDownloads || 10;
+      console.log('updated max_concurrent downloads to ' + max_concurrent_downloads)
 
+      updatePaths(outputPath);
 
-    // Uniquely name the temp file using the timestamp
-    let tempFile = Date.parse(timestamp) + '.' + format;
-    let tempFilePath = tempFolderPath + '\\' + tempFile;
-    console.log('temp file: ' + tempFile);
-
-
-    // Construct yt-dlp command arguments
-    let args = [`"${url}"`, '-o', `"${tempFilePath}"`];
-
-    if (cookiePath) {
-      args.push('--cookies', `"${cookiePath.replace(/\\/g, '/')}"`);
-    }
-
-    if (format === 'mp4') {
-      args.push('-f', 'bv+ba/b', '--merge-output-format', 'mp4');
-    } else {
-      args.push('-f', 'ba/b', '-f', 'm4a');
-    }
-
-    console.log('spawning yt-dlp with args: ')
-    console.log(args)
-
-    // Initialize yt-dlp process
-    const ytDlpProcess = spawn('yt-dlp', args
-      , {
-        cwd: tempFolderPath,
-        shell: true,
-      }
-    );
-
-
-    let titlePromise = null
-    if (!useShazam) {
-      titlePromise = getTitle(url, cookiePath);
-    }
-
-    activeProcesses[timestamp] = { process: ytDlpProcess, fileName: 'fetching...' }
-
-    // Listen to yt-dlp stderr for debugging
-    ytDlpProcess.stderr.on('data', (data) => {
-      const lines = data.toString().split('\n');
-
-      lines.forEach(line => {
-        console.log('stderr: ' + line)
-      });
-    });
-
-    // Listen to yt-dlp stdout for progress updates
-    ytDlpProcess.stdout.on('data', (data) => {
-      const lines = data.toString().split('\n');
-
-      lines.forEach(line => {
-        // Example yt-dlp progress line:
-        // [download]   1.2% of 10.00MiB at 1.00MiB/s ETA 00:09
-        const progressMatch = line.match(/\[download\]\s+(\d+(\.\d+)?)% of/);
-        if (progressMatch) {
-          const progressPercent = parseFloat(progressMatch[1]);
-          console.log('download progress: ' + progressPercent);
-
-          // Broadcast progress to clients with timestamp
-          const message = { progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp, fileName: 'fetching... ' };
-          broadcastProgress(message)
-        }
-      });
-    });
-
-
-    ytDlpProcess.on('close', async (code) => {
-      let cleanedTitle = '';
-      if (useShazam) {
-        if (normalizeAudio) {
-          cleanedTitle = Date.parse(timestamp) + '_normalized';
-        } else {
-          cleanedTitle = Date.parse(timestamp);
-        }
-      } else {
-        cleanedTitle = processVideoTitle(await titlePromise, removeSubtext);
-        console.log(' ------------- cleaned title: ' + cleanedTitle)
-      }
-
-      let newFile = cleanedTitle + '.' + format;
-      let filePath = tempFolderPath + '\\' + newFile;
-
-
-      if (code !== 0) {
-        console.error(`error: yt-dlp exited with code ${code}`);
-
-        const message = { progress: 0, status: 'error', file: url, timestamp: timestamp, fileName: newFile };
-        broadcastProgress(message);
-        clearCache(cleanedTitle, timestamp)
-        delete activeProcesses[timestamp];
-        resolve({ message: 'failure', file: url, timestamp: timestamp });
+      if (!url) {
+        console.log('err - no URL!')
+        resolve({ error: 'YouTube URL is required.' })
         return;
       }
 
-      // start the shazam call
-      let shazamPromise = null;
-      if (useShazam) {
-        shazamPromise = getTitlewShazam(tempFilePath, url, cookiePath);
+
+      // Uniquely name the temp file using the timestamp
+      let tempFile = Date.parse(timestamp) + '.' + format;
+      let tempFilePath = tempFolderPath + '\\' + tempFile;
+      console.log('temp file: ' + tempFile);
+
+
+      // Construct yt-dlp command arguments
+      let args = [`"${url}"`, '-o', `"${tempFilePath}"`];
+
+      if (cookiePath) {
+        args.push('--cookies', `"${cookiePath.replace(/\\/g, '/')}"`);
       }
 
-      //optionally normalize the audio
-      if (normalizeAudio) {
-        const totalDuration = await getTotalDuration(tempFilePath);
-        console.log('totalDuration: ' + totalDuration);
+      if (format === 'mp4') {
+        args.push('-f', 'bv+ba/b', '--merge-output-format', 'mp4');
+      } else {
+        args.push('-f', 'ba/b', '-f', 'm4a');
+      }
 
-        //normalize the audio and save it to the new path (renaming it)
-        let ffmpegArgs = [
-          '-i', tempFilePath,
-          '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
-          '-c:v', 'copy',  //copy video stream without re-encoding
-          '-c:a', 'aac',  // re-encode audio to aac
-          filePath,
-          '-threads', `${os.cpus().length - 1}`,
-          '-progress', 'pipe:1',
-          '-nostats']
+      console.log('spawning yt-dlp..')
+      console.log(args)
 
-        const ffmpegProcess = spawn('ffmpeg', ffmpegArgs);
+      // Initialize yt-dlp process
+      const ytDlpProcess = spawn('yt-dlp', args
+        , {
+          cwd: tempFolderPath,
+          shell: true,
+        }
+      );
 
-        activeProcesses[timestamp] = { process: ffmpegProcess, fileName: newFile }
+      let newFile = { value: 'fetching... ' }
+      let titlePromise = null
+      if (!useShazam) {
+        console.log('calling getTitle...')
+        titlePromise = getTitle(url, cookiePath, newFile, removeSubtext, format);
+      }
 
-        let progressData = '';
+      activeProcesses[timestamp] = { process: ytDlpProcess, fileName: newFile.value }
 
-        ffmpegProcess.stdout.on('data', (chunk) => {
-          progressData += chunk.toString();
+      // Listen to yt-dlp stderr for debugging
+      ytDlpProcess.stderr.on('data', (data) => {
+        const lines = data.toString().split('\n');
 
-          // iterate over data's lines
-          const lines = progressData.split('\n');
-          processFFMPEGLine(newFile, url, lines, totalDuration, timestamp);
-          progressData = lines[lines.length - 1];
+        lines.forEach(line => {
+          console.log('stderr: ' + line)
         });
+      });
 
-        //stderr output for debugging
-        ffmpegProcess.stderr.on('data', (data) => {
-          console.error(`stderr: ${data}`);
+      // Listen to yt-dlp stdout for progress updates
+      ytDlpProcess.stdout.on('data', (data) => {
+        const lines = data.toString().split('\n');
+
+        lines.forEach(line => {
+          // Example yt-dlp progress line:
+          // [download]   1.2% of 10.00MiB at 1.00MiB/s ETA 00:09
+          const progressMatch = line.match(/\[download\]\s+(\d+(\.\d+)?)% of/);
+          if (progressMatch) {
+            const progressPercent = parseFloat(progressMatch[1]);
+            console.log('ytdlp progress: ' + progressPercent);
+
+            // Broadcast progress to clients with timestamp
+            const message = { progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value };
+            broadcastProgress(message)
+          }
         });
+      });
 
-        ffmpegProcess.on('close', async (code) => {
-          console.log(`ffmpeg exited with code ${code}`);
-          if (code !== 0) {
+
+      ytDlpProcess.on('close', async (code) => {
+        if (code !== 0) {
+          console.error(`error: yt-dlp exited with code ${code}`);
+
+          //retry the yt-dlp process but without cookies
+          if (cookiePath) {
+            console.log('Retrying without cookies...');
+            ytdlpMain({ ...bodyObject, cookiePath: '' });
+            return;
+          }
+
+          const message = { progress: 0, status: 'error', file: url, timestamp: timestamp, fileName: newFile.value };
+          broadcastProgress(message);
+          clearCache(newFile.value, timestamp)
+          delete activeProcesses[timestamp];
+          resolve({ message: 'failure', file: url, timestamp: timestamp });
+          return;
+        }
+
+        if (useShazam) {
+          if (normalizeAudio) {
+            newFile.value = Date.parse(timestamp) + '_normalized.' + format;
+          } else {
+            newFile.value = Date.parse(timestamp) + '.' + format;
+          }
+        } else {
+          await titlePromise;
+          console.log(' ------------- cleaned title: ' + newFile.value)
+        }
+
+        let filePath = tempFolderPath + '\\' + newFile.value;
+
+
+        // start the shazam call
+        let shazamPromise = null;
+        if (useShazam) {
+          shazamPromise = getTitlewShazam(tempFilePath, url, cookiePath, newFile, removeSubtext, format);
+        }
+
+        //optionally normalize the audio
+        if (normalizeAudio) {
+          const totalDuration = await getTotalDuration(tempFilePath);
+          console.log('totalDuration: ' + totalDuration);
+
+          //normalize the audio and save it to the new path (renaming it)
+          let ffmpegArgs = [
+            '-i', tempFilePath,
+            '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
+            '-c:v', 'copy',  //copy video stream without re-encoding
+            '-c:a', 'aac',  // re-encode audio to aac
+            filePath,
+            '-threads', `${os.cpus().length - 1}`,
+            '-progress', 'pipe:1',
+            '-nostats']
+
+          const ffmpegProcess = spawn('ffmpeg', ffmpegArgs);
+
+          activeProcesses[timestamp] = { process: ffmpegProcess, fileName: newFile.value }
+
+          let progressData = '';
+
+          ffmpegProcess.stdout.on('data', (chunk) => {
+            progressData += chunk.toString();
+
+            // iterate over data's lines
+            const lines = progressData.split('\n');
+            processFFMPEGLine(newFile.value, url, lines, totalDuration, timestamp);
+            progressData = lines[lines.length - 1];
+          });
+
+          //stderr output for debugging
+          ffmpegProcess.stderr.on('data', (data) => {
+            console.error(`stderr: ${data}`);
+          });
+
+          ffmpegProcess.on('close', async (code) => {
+            console.log(`ffmpeg exited with code ${code}`);
+            if (code !== 0) {
+              //clean up cached files
+              clearCache(newFile.value, timestamp);
+              delete activeProcesses[timestamp];
+
+              // notify clients of error
+              const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value };
+              broadcastProgress(errorMessage);
+              resolve(errorMessage);
+              return;
+            } else {
+              // rename the file with shazam API from gettitlewshazam
+              if (useShazam && shazamPromise) {
+                await shazamPromise;
+
+                console.log('got title with shazam: ' + newFile.value);
+                let newShazamPath = tempFolderPath + '\\' + newFile.value;
+
+                //rename normalized file with path from shazam
+                try {
+                  fs.renameSync(filePath, newShazamPath);
+                } catch (e) {
+                  console.log('ERROR renaming file: ' + e.message)
+                  //clean up cached files
+                  clearCache(newFile.value, timestamp);
+                  delete activeProcesses[timestamp];
+
+                  // notify clients of error
+                  const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value };
+                  broadcastProgress(errorMessage);
+                  resolve(errorMessage);
+                  return;
+                }
+                filePath = newShazamPath;
+              }
+
+
+              // upload to google drive if necessary
+              if (gdrive) {
+                const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath);
+
+                console.log('Uploading to gdrive', newFile.value);
+                await uploadFile(filePath, newFile.value, drive, gdriveFolderID);
+              }
+
+              try {
+                let permFile = downloadsPath + '\\' + newFile.value
+                //delete the file
+                deleteFileIfExists(tempFilePath)
+                deleteFileIfExists(permFile)
+
+                //move the file from temp to downloads
+                fs.moveSync(filePath, permFile)
+
+                clearCache(newFile.value, timestamp)
+              } catch (e) {
+                console.log('ERR completing download: ' + e.message)
+              }
+
+              // send completion message to client and service worker
+              console.log(`yt-dlp completed successfully.`);
+              broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed', fileName: newFile.value });
+              delete activeProcesses[timestamp];
+              resolve({ message: 'success', file: url, timestamp: timestamp, fileName: newFile.value });
+              return;
+            }
+          });
+
+
+
+        } else {
+          // rename the file with shazam API from gettitlewshazam or rename it with ytdlp
+          try {
+            if (useShazam && shazamPromise) {
+              await shazamPromise;
+              console.log('got title with shazam: ' + newFile.value);
+              let newShazamPath = tempFolderPath + '\\' + newFile.value;
+
+              fs.renameSync(tempFilePath, newShazamPath);
+
+              filePath = newShazamPath;
+            } else {
+              // rename the file to the title fetched by yt-dlp
+              fs.renameSync(tempFilePath, filePath);
+            }
+          } catch (e) {
+            console.log('ERROR renaming file: ' + e.message)
+
             //clean up cached files
-            clearCache(cleanedTitle, timestamp);
+            clearCache(newFile.value, timestamp);
             delete activeProcesses[timestamp];
 
             // notify clients of error
-            const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile };
+            const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value };
             broadcastProgress(errorMessage);
             resolve(errorMessage);
             return;
-          } else {
-            // rename the file with shazam API from gettitlewshazam
-            if (useShazam && shazamPromise) {
-              let shazamTitle = await shazamPromise;
-              shazamTitle = processVideoTitle(shazamTitle);
-
-              console.log('got title with shazam: ' + shazamTitle);
-              let newShazamPath = tempFolderPath + '\\' + shazamTitle + '.' + format;
-
-              //rename normalized file with path from shazam
-              fs.renameSync(filePath, newShazamPath);
-
-              newFile = shazamTitle + '.' + format;
-              filePath = newShazamPath;
-            }
-
-
-            // upload to google drive if necessary
-            if (gdrive) {
-              const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath);
-
-              console.log('Uploading to gdrive', newFile);
-              await uploadFile(filePath, newFile, drive, gdriveFolderID);
-            }
-
-            try {
-              let permFile = downloadsPath + '\\' + newFile
-              //delete the file
-              deleteFileIfExists(tempFilePath)
-              deleteFileIfExists(permFile)
-
-              //move the file from temp to downloads
-              fs.moveSync(filePath, permFile)
-
-              clearCache(newFile, timestamp)
-            } catch (e) {
-              console.log('ERR completing download: ' + e.message)
-            }
-
-            // send completion message to client and service worker
-            console.log(`yt-dlp completed successfully.`);
-            broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed', fileName: newFile });
-            delete activeProcesses[timestamp];
-            resolve({ message: 'success', file: url, timestamp: timestamp, fileName: newFile });
-            return;
           }
-        });
 
 
+          // upload to google drive if necessary
+          if (gdrive) {
+            const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath);
 
-      } else {
-        // rename the file with shazam API from gettitlewshazam or rename it with ytdlp
-        if (useShazam && shazamPromise) {
-          let shazamTitle = await shazamPromise;
-          console.log('got title with shazam: ' + shazamTitle);
-          let newShazamPath = tempFolderPath + '\\' + shazamTitle + '.' + format;
+            console.log('Uploading to gdrive', newFile.value);
+            await uploadFile(filePath, newFile.value, drive, gdriveFolderID);
+          }
 
-          fs.renameSync(tempFilePath, newShazamPath);
+          try {
+            let permFile = downloadsPath + '\\' + newFile.value;
+            deleteFileIfExists(permFile);
 
-          newFile = shazamTitle + '.' + format;
-          filePath = newShazamPath;
+            //move the file from temp to downloads
+            fs.moveSync(filePath, permFile);
 
-        } else {
-          // rename the file to the title fetched by yt-dlp
-          fs.renameSync(tempFilePath, filePath);
+            clearCache(newFile.value, timestamp);
+
+          } catch (e) {
+            console.log('ERR completing download: ' + e.message)
+          }
+
+          // send completion message to client and service worker
+          console.log(`yt-dlp completed successfully.`);
+          broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed', fileName: newFile.value });
+          setTimeout(() => { }, 500); //wait half a second to make sure broadcast sent
+
+          console.log('DEBUG -_-_-_-_ SENT COMPLETION BROADCAST: ' + newFile.value);
+          delete activeProcesses[timestamp];
+          resolve({ message: 'success', file: url, timestamp: timestamp, fileName: newFile.value });
+          return;
         }
+      });
 
-
-
-        // upload to google drive if necessary
-        if (gdrive) {
-          const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath);
-
-          console.log('Uploading to gdrive', newFile);
-          await uploadFile(filePath, newFile, drive, gdriveFolderID);
-        }
-
-        try {
-          let permFile = downloadsPath + '\\' + newFile;
-          deleteFileIfExists(permFile);
-
-          //move the file from temp to downloads
-          fs.moveSync(filePath, permFile);
-
-          clearCache(newFile, timestamp);
-
-        } catch (e) {
-          console.log('ERR completing download: ' + e.message)
-        }
-
-        // send completion message to client and service worker
-        console.log(`yt-dlp completed successfully.`);
-        broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed', fileName: newFile });
-        setTimeout(() => { }, 500); //wait half a second to make sure broadcast sent
-
-        console.log('DEBUG -_-_-_-_ SENT COMPLETION BROADCAST: ' + newFile);
+      ytDlpProcess.on('error', (error) => {
+        console.error(`Error executing yt-dlp: ${error.message}`);
+        broadcastProgress({ progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value });
         delete activeProcesses[timestamp];
-        resolve({ message: 'success', file: url, timestamp: timestamp, fileName: newFile });
+        resolve({ message: 'failure', timestamp: timestamp });
         return;
-      }
-    });
+      });
 
-    ytDlpProcess.on('error', (error) => {
-      console.error(`Error executing yt-dlp: ${error.message}`);
-      broadcastProgress({ progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile });
-      delete activeProcesses[timestamp];
-      resolve({ message: 'failure', timestamp: timestamp });
-      return;
-    });
+    }
   });
 }
 
@@ -543,7 +616,11 @@ app.post('/download_m3u8', async (req, res) => {
   console.log('downloading m3u8 file...');
   num_downloads++;
 
-  const { link, timestamp, title, outputPath, gdrive, gdriveKeyPath, gdriveFolderID, normalizeAudio, downloadm3u8 } = req.body;
+  const { link, timestamp, title, outputPath, gdrive, gdriveKeyPath, gdriveFolderID, normalizeAudio, downloadm3u8, maxDownloads } = req.body;
+
+  max_concurrent_downloads = maxDownloads || 10;
+  console.log('updated max_concurrent downloads to ' + max_concurrent_downloads)
+
   updatePaths(outputPath)
 
 
@@ -727,7 +804,7 @@ app.post('/stop_download', (req, res) => {
 
 app.post('/kill_processes', async (req, res) => {
   console.log('--- killing all active processes ---');
-
+  abortAllPlaylists = true; // set the abort playlists flag to stop new videos from being downloaded
   const killPromises = Object.values(activeProcesses).map(processInfo => {
     const process = processInfo.process;
     console.log('Attempting to kill process ' + process.pid);
@@ -769,6 +846,7 @@ app.post('/open', (req, res) => {
   const { focusExplorerPath, AHKPath, outputPath } = req.body;
   updatePaths(outputPath);
 
+  console.log('downloadsPath: ' + downloadsPath);
   exec(`"${AHKPath}" "${focusExplorerPath}" "${downloadsPath}"`, (err, out, errst) => {
     if (err) {
       console.error(`Error bringing window to front: ${err.message}`);
@@ -869,7 +947,9 @@ function delay(ms) {
 
 // start a playlist download 
 app.post('/playlist', (req, res) => {
-  const { playlistURL, format, gdrive, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext, normalizeAudio, useShazam, cookiePath } = req.body;
+  abortAllPlaylists = false;
+
+  const { playlistURL, format, gdrive, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext, normalizeAudio, useShazam, cookiePath, maxDownloads } = req.body;
   console.log('received playlist request!');
 
   let command = `yt-dlp --flat-playlist -j "${playlistURL}"`
@@ -905,17 +985,21 @@ app.post('/playlist', (req, res) => {
     const downloadPromises = [];
     // download each video
     for (urlNo in videoURLs) {
-      console.log('num downloads: ' + num_downloads)
-      while (num_downloads >= MAX_CONCURRENT_DOWNLOADS) {
-        console.log('WARN: Max concurrent downloads reached! Polling until there is room...')
+      console.log('#### num downloads: ' + num_downloads + '/' + max_concurrent_downloads);
+      while (num_downloads >= max_concurrent_downloads) {
+        console.log('WARN: Max concurrent downloads reached, cur: ' + num_downloads + '! Polling until there is room...')
         await delay(1000); // Check every second if there is room to start the download
+      }
+
+      if (abortAllPlaylists) {
+        break;
       }
 
       url = videoURLs[urlNo];
 
       console.log('---- playlist: downloading ' + url);
       let timestamp = new Date().toISOString();
-      bodyObject = { url, format, gdrive, timestamp, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext, normalizeAudio, useShazam, cookiePath };
+      bodyObject = { url, format, gdrive, timestamp, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext, normalizeAudio, useShazam, cookiePath, maxDownloads };
 
       const dlPromise = ytdlpDownload(bodyObject).finally(() => { num_downloads-- });
       downloadPromises.push(dlPromise);

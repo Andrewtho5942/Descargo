@@ -15,27 +15,27 @@ import settingsIcon from './images/settings.png'
 
 
 const defaultSettings = [
-  { key: "AHKPath", value: '' },
-  { key: "focusExplorerPath", value: '' },
+  { key: "AHKPath", value: 'C:\\Program Files\\AutoHotkey\\v2\\AutoHotkey.exe' },
+  { key: "focusExplorerPath", value: 'C:\\Users\\andre\\focusExplorer.ahk' },
   { key: "darkMode", value: true },
   { key: "cloudMode", value: false },
 
   { key: "m3u8Notifs", value: true },
-  { key: "mp4Notifs", value: true },
+  { key: "mp4Notifs", value: false },
   { key: "m4aNotifs", value: false },
   { key: "failureNotifs", value: false },
-  { key: "playlistNotifs", value: false },
+  { key: "playlistNotifs", value: true },
 
-  { key: "outputPath", value: '' },
+  { key: "outputPath", value: 'C:\\Users\\andre\\Downloads\\Descargo' },
   { key: "removeSubtext", value: true },
-  { key: "normalizeAudio", value: true },
-  { key: "playlistLink", value: '' },
+  { key: "normalizeAudio", value: false },
   { key: "useShazam", value: false },
   { key: "downloadm3u8", value: false },
+  { key: "maxDownloads", value: '10' },
 
-  { key: "gdriveJSONKey", value: '' },
-  { key: "gdriveFolderID", value: '' },
-  { key: "cookiePath", value: '' },
+  { key: "gdriveJSONKey", value: 'C:\\Users\\andre\\OneDrive\\Documents\\Webdev\\descargo\\server\\keys\\yt-dl-443015-d39da117fe4a.json' },
+  { key: "gdriveFolderID", value: '17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q' },
+  { key: "cookiePath", value: "C:\\Users\\andre\\OneDrive\\Documents\\cookies.firefox-private.txt" },
 
   { key: "submitHotkey", value: 'Enter' },
   { key: "formatHotkey", value: 'p' },
@@ -49,7 +49,6 @@ const defaultSettings = [
 ]
 
 function App() {
-
   const ISLOCAL = true;
   const SERVER_PORT = 5001;
   const serverURL = ISLOCAL ? `http://localhost:${SERVER_PORT}` : "https://3a51-156-146-107-197.ngrok-free.app";
@@ -243,8 +242,8 @@ function App() {
     let newHistory = historyRef.current;
     newHistory.unshift({ file, fileName, progress, timestamp, status })
 
-    if (newHistory.length > 12) {
-      newHistory = newHistory.slice(0, 12);
+    if (newHistory.length > 25) {
+      newHistory = newHistory.slice(0, 25);
     }
     setHistory(newHistory);
 
@@ -354,6 +353,7 @@ function App() {
         gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value,
         normalizeAudio: settingsRef.current.find(s => s.key === 'normalizeAudio').value,
         downloadm3u8: settingsRef.current.find(s => s.key === 'downloadm3u8').value,
+        maxDownloads: settingsRef.current.find(s => s.key === 'maxDownloads').value,
       }).then((result) => {
         if (result.data.status === 'error') {
           //update the history if it times out
@@ -411,47 +411,66 @@ function App() {
   };
 
 
-
   const submitLink = () => {
+    let currentLink = popupSettingsRef.current[2];
+
     setResult('loading');
-    if (!popupSettingsRef.current[2]) {
+    if (!currentLink) {
       setResult('failure');
       return;
     }
+    const timestamp = new Date().toISOString();
 
-    try {
-      const timestamp = new Date().toISOString();
-      const format = popupSettingsRef.current[0] ? 'mp4' : 'm4a';
-
-      addToHistory(popupSettingsRef.current[2], 'fetching title... ', 0, timestamp, 'in-progress');
-      console.log('outputPath: ' + settingsRef.current.find(s => s.key === 'outputPath').value)
-      axios.post(`${serverURL}/download`, {
-        headers: {
-          'ngrok-skip-browser-warning': '1'
-        },
-        url: popupSettingsRef.current[2],
-        format: format,
-        gdrive: popupSettingsRef.current[1],
-        timestamp: timestamp,
-        outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
-        gdriveKeyPath: settingsRef.current.find(s => s.key === 'gdriveJSONKey').value,
-        gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value,
-        removeSubtext: settingsRef.current.find(s => s.key === 'removeSubtext').value,
-        normalizeAudio: settingsRef.current.find(s => s.key === 'normalizeAudio').value,
-        useShazam: settingsRef.current.find(s => s.key === 'useShazam').value,
-        cookiePath: settingsRef.current.find(s => s.key === 'cookiePath').value,
-      }).then((response) => {
-        console.log('download response: ')
-        console.log(response.data.message)
-        setResult(response.data.message);
-      }).catch((e) => {
-        console.error('Error:', e);
-        setResult('failure');
-      });
-    } catch (error) {
-      console.error('Error:', error);
-      setResult('failure');
+    let dlArgs = {
+      timestamp: timestamp,
+      format: popupSettingsRef.current[0] ? 'mp4' : 'm4a',
+      gdrive: popupSettingsRef.current[1],
+      outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
+      gdriveKeyPath: settingsRef.current.find(s => s.key === 'gdriveJSONKey').value,
+      gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value,
+      removeSubtext: settingsRef.current.find(s => s.key === 'removeSubtext').value,
+      normalizeAudio: settingsRef.current.find(s => s.key === 'normalizeAudio').value,
+      useShazam: settingsRef.current.find(s => s.key === 'useShazam').value,
+      cookiePath: settingsRef.current.find(s => s.key === 'cookiePath').value,
+      maxDownloads: settingsRef.current.find(s => s.key === 'maxDownloads').value,
     }
+
+    // First, determine if the link is a playlist or a video by checking if it contains "playlist"
+    if ((currentLink.includes("playlist")) && (currentLink.includes("youtube"))) {
+      console.log('playlist detected')
+      //video is a playlist
+      axios.post(`${serverURL}/playlist`, {
+        ...dlArgs,
+        playlistURL: currentLink
+      }).then((result) => {
+        console.log('playlist download ended: ' + result.message);
+      });
+
+    } else {
+      console.log('video detected')
+
+      //regular video
+      try {
+        addToHistory(currentLink, 'fetching... ', 0, timestamp, 'in-progress');
+
+        axios.post(`${serverURL}/download`, {
+          ...dlArgs,
+          url: currentLink,
+        }).then((response) => {
+          console.log('download response: ')
+          console.log(response.data.message)
+          setResult(response.data.message);
+        }).catch((e) => {
+          console.error('Error:', e);
+          setResult('failure');
+        });
+      } catch (error) {
+        console.error('Error:', error);
+        setResult('failure');
+      }
+    }
+
+
 
     setPopupSettings((prevSettings) => {
       storePopupSettings([prevSettings[0], prevSettings[1], '']);
@@ -550,6 +569,10 @@ function App() {
   }
 
   const openFolder = (local) => {
+    console.log('outputPath: ' + settingsRef.current.find(s => s.key === 'outputPath').value)
+    console.log('settingsRef.current:')
+    console.log(settingsRef.current);
+
     if (local) {
       // open file explorer to downloads folder
       try {
@@ -584,7 +607,7 @@ function App() {
 
       <input
         type="text"
-        value={popupSettingsRef.current[2]}
+        value={popupSettings[2]}
         onChange={(e) => { updateLink(e) }}
         placeholder="Enter YouTube URL"
         className="link-input"
@@ -593,8 +616,8 @@ function App() {
       <div className='autofill-btn' onClick={() => { autofillLink() }}>fill</div>
 
 
-      <label className={`format checkbox-container ${popupSettingsRef.current[0] ? 'active' : ''}`}>
-        <input type="checkbox" checked={popupSettingsRef.current[0]} onChange={() => {
+      <label className={`format checkbox-container ${popupSettings[0] ? 'active' : ''}`}>
+        <input type="checkbox" checked={popupSettings[0]} onChange={() => {
           setPopupSettings((prevSettings) => {
             storePopupSettings([!prevSettings[0], prevSettings[1], prevSettings[2]]);
             return ([!prevSettings[0], prevSettings[1], prevSettings[2]]);
@@ -613,8 +636,8 @@ function App() {
       }
 
 
-      <label className={`gdrive checkbox-container ${popupSettingsRef.current[1] ? 'active' : ''}`}>
-        <input type="checkbox" checked={popupSettingsRef.current[1]} onChange={() => {
+      <label className={`gdrive checkbox-container ${popupSettings[1] ? 'active' : ''}`}>
+        <input type="checkbox" checked={popupSettings[1]} onChange={() => {
           setPopupSettings((prevSettings) => {
             storePopupSettings([prevSettings[0], !prevSettings[1], prevSettings[2]]);
             return ([prevSettings[0], !prevSettings[1], prevSettings[2]]);
@@ -713,7 +736,9 @@ function App() {
                     })}
                   </div></td>
                   <td className='history-link' tabIndex="-1"><div className='history-content' tabIndex="-1">
-                    {item.status === 'in-progress' && <>{`${progress}% - `}<button style={{ marginRight: '4px' }} tabIndex="-1" onClick={() => { stopDownload(timestamp) }}>stop</button></>}{fileName + ': '}{isURL ? <a href={file} tabIndex="-1">{file}</a> : file}
+                    {item.status === 'in-progress' && <>
+                      <span className='progress'>{`${progress}%`}</span> - <button style={{ marginRight: '4px' }} tabIndex="-1" onClick={() => { stopDownload(timestamp) }}>stop</button>
+                    </>}{fileName + ': '}{isURL ? <a href={file} tabIndex="-1">{file}</a> : file}
                   </div></td>
                 </tr>
               } catch (e) {

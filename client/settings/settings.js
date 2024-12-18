@@ -10,21 +10,21 @@ let settings = [
   { key: "cloudMode", value: false },
 
   { key: "m3u8Notifs", value: true },
-  { key: "mp4Notifs", value: true },
+  { key: "mp4Notifs", value: false },
   { key: "m4aNotifs", value: false },
   { key: "failureNotifs", value: false },
-  { key: "playlistNotifs", value: false },
+  { key: "playlistNotifs", value: true },
 
   { key: "outputPath", value: 'C:\\Users\\andre\\Downloads\\Descargo' },
   { key: "removeSubtext", value: true },
-  { key: "normalizeAudio", value: true },
-  { key: "playlistLink", value: '' },
+  { key: "normalizeAudio", value: false },
   { key: "useShazam", value: false },
   { key: "downloadm3u8", value: false },
+  { key: "maxDownloads", value: '10' },
 
   { key: "gdriveJSONKey", value: 'C:\\Users\\andre\\OneDrive\\Documents\\Webdev\\descargo\\server\\keys\\yt-dl-443015-d39da117fe4a.json' },
   { key: "gdriveFolderID", value: '17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q' },
-  { key: "cookiePath", value: 'C:\Users\\andre\\OneDrive\\Documents\\cookies.txt' },
+  { key: "cookiePath", value: "C:\\Users\\andre\\OneDrive\\Documents\\cookies.firefox-private.txt" },
 
   { key: "submitHotkey", value: 'Enter' },
   { key: "formatHotkey", value: 'p' },
@@ -197,8 +197,29 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (classes.contains('text-input')) {
       console.log('adding onchange listener...')
       input.addEventListener('input', (event) => {
-        const newValue = event.target.value;
-        settings[i].value = newValue;
+        let newValue = event.target.value;
+
+        if (settings[i].key === 'maxDownloads') {
+          try {
+            newValue = parseInt(newValue);
+
+            if (!newValue) {
+              console.log('no new value: ' + newValue)
+              newValue = 1;
+              input.value = '';
+            } else {
+              console.log('newvalue: ' + newValue)
+              newValue = Math.min(Math.max(newValue, 1), 25); // range must be between 1 - 25
+              settings[i].value = newValue;
+
+              input.value = settings[i].value;
+            }
+          } catch (e) {
+            console.log('new maxDownloads value (' + newValue + ') is not a number! Error: ' + e.message) //dont update if it cannot be parsed into a number           
+          }
+        } else {
+          settings[i].value = newValue;
+        }
 
         storage.set({ ['settings']: settings });
         console.log(`Saved new value for ` + settings[i].key + `: ${newValue}`);
@@ -207,51 +228,51 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // add submit listeners for playlist-input
-  const playlistForm = document.getElementById('playlist-form');
-  const playlistInput = document.getElementById('playlist-input');
-  const playlistBtn = document.getElementById('playlist-btn');
+  // const playlistForm = document.getElementById('playlist-form');
+  // const playlistInput = document.getElementById('playlist-input');
+  // const playlistBtn = document.getElementById('playlist-btn');
 
-  function handleStartPlaylist(event) {
-    event.preventDefault();
+  // function handleStartPlaylist(event) {
+  //   event.preventDefault();
 
-    console.log('starting playlist download: ' + playlistInput.value);
+  //   console.log('starting playlist download: ' + playlistInput.value);
 
 
-    //get the current popupSettings from local storage
-    storage.get("popupSettings", (result) => {
-      let popupSettings = result.popupSettings;
-      if (!popupSettings) {
-        popupSettings = [false, true]
-      }
-      // playlist request to the server
-      axios.post(`${serverURL}/playlist`, {
-        playlistURL: playlistInput.value,
-        format: result.popupSettings[0] ? 'mp4' : 'm4a',
-        gdrive: result.popupSettings[1],
-        outputPath: settings.find(s => s.key === 'outputPath').value,
-        gdriveKeyPath: settings.find(s => s.key === 'gdriveJSONKey').value,
-        gdriveFolderID: settings.find(s => s.key === 'gdriveFolderID').value,
-        removeSubtext: settings.find(s => s.key === 'removeSubtext').value,
-        normalizeAudio: settings.find(s => s.key === 'normalizeAudio').value,
-        useShazam: settings.find(s => s.key === 'useShazam').value,
-        cookiePath: settings.find(s => s.key === 'cookiePath').value,
-      }).then((result) => {
-        console.log('playlist download ended: ' + result.message);
-      });
+  //   //get the current popupSettings from local storage
+  //   storage.get("popupSettings", (result) => {
+  //     let popupSettings = result.popupSettings;
+  //     if (!popupSettings) {
+  //       popupSettings = [false, true]
+  //     }
+  //     // playlist request to the server
+  //     axios.post(`${serverURL}/playlist`, {
+  //       playlistURL: playlistInput.value,
+  //       format: result.popupSettings[0] ? 'mp4' : 'm4a',
+  //       gdrive: result.popupSettings[1],
+  //       outputPath: settings.find(s => s.key === 'outputPath').value,
+  //       gdriveKeyPath: settings.find(s => s.key === 'gdriveJSONKey').value,
+  //       gdriveFolderID: settings.find(s => s.key === 'gdriveFolderID').value,
+  //       removeSubtext: settings.find(s => s.key === 'removeSubtext').value,
+  //       normalizeAudio: settings.find(s => s.key === 'normalizeAudio').value,
+  //       useShazam: settings.find(s => s.key === 'useShazam').value,
+  //       cookiePath: settings.find(s => s.key === 'cookiePath').value,
+  //     }).then((result) => {
+  //       console.log('playlist download ended: ' + result.message);
+  //     });
 
-      // update the storage with the empty playlist value
-      playlistInput.value = '';
-      settings.find(s => s.key === 'playlistLink').value = '';
-      storage.set({ ['settings']: settings });
-    })
-  }
+  //     // update the storage with the empty playlist value
+  //     playlistInput.value = '';
+  //     settings.find(s => s.key === 'playlistLink').value = '';
+  //     storage.set({ ['settings']: settings });
+  //   })
+  // }
 
-  if (playlistForm) {
-    playlistForm.addEventListener('submit', handleStartPlaylist)
-  }
-  if (playlistBtn) {
-    playlistBtn.addEventListener('click', handleStartPlaylist)
-  }
+  // if (playlistForm) {
+  //   playlistForm.addEventListener('submit', handleStartPlaylist)
+  // }
+  // if (playlistBtn) {
+  //   playlistBtn.addEventListener('click', handleStartPlaylist)
+  // }
 });
 
 
