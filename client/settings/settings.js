@@ -19,6 +19,7 @@ let settings = [
   { key: "removeSubtext", value: true },
   { key: "normalizeAudio", value: false },
   { key: "useShazam", value: false },
+  { key: "generateSubs", value: false },
   { key: "downloadm3u8", value: false },
   { key: "maxDownloads", value: '10' },
 

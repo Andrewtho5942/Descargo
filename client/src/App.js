@@ -30,6 +30,7 @@ const defaultSettings = [
   { key: "removeSubtext", value: true },
   { key: "normalizeAudio", value: false },
   { key: "useShazam", value: false },
+  { key: "generateSubs", value: false },
   { key: "downloadm3u8", value: false },
   { key: "maxDownloads", value: '10' },
 
@@ -433,6 +434,7 @@ function App() {
       useShazam: settingsRef.current.find(s => s.key === 'useShazam').value,
       cookiePath: settingsRef.current.find(s => s.key === 'cookiePath').value,
       maxDownloads: settingsRef.current.find(s => s.key === 'maxDownloads').value,
+      generateSubs: settingsRef.current.find(s => s.key === 'generateSubs').value,
     }
 
     // First, determine if the link is a playlist or a video by checking if it contains "playlist"
@@ -539,7 +541,8 @@ function App() {
           headers: {
             'ngrok-skip-browser-warning': '1'
           },
-          type: 'local-m3u8'
+          type: 'local-m3u8',
+          outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
         }).then((response) => {
           if (response.data.message === 'success') {
             console.log('successfully cleared m3u8 menu')
