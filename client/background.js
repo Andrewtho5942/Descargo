@@ -29,20 +29,35 @@ function truncateString(str, len) {
     return str.length > len ? str.slice(0, len - 3) + '...' : str;
 }
 
+let nonRepeatFlag = false;
 function handleM3U8Request(details) {
+    if (nonRepeatFlag) {
+        nonRepeatFlag = false;
+        return;
+    }
     const url = details.url;
-
     if (url.endsWith('.m3u8')) {
-        const sourceURL = details.frameAncestors[0].url
-        const currentYear = new Date().getFullYear().toString();
-        const year_regex = new RegExp(`\\b${currentYear}\\b`, 'g');
-        console.log('sourceURL: ' + sourceURL)
+        nonRepeatFlag = true;
+        fetch(url).then((response) => response.text()).then((content) => {
+            // Check if the content has #EXT-X-STREAM-INF to identify it as a playlist
+            if (content.includes('#EXT-X-STREAM-INF')) {
+                const sourceURL = details.frameAncestors[0].url
+                const currentYear = new Date().getFullYear().toString();
+                const year_regex = new RegExp(`\\b${currentYear}\\b`, 'g');
+                console.log('sourceURL: ' + sourceURL)
 
-        //get and process the source URL into just the title
-        const title = sourceURL.slice(sourceURL.lastIndexOf('/') + 1).replace(/-\d+(\.\d+)?$/, '')
-            .replace(/(watch|free)/g, '').replace(year_regex, '').replace(/^-+|-+$/g, '');
+                //get and process the source URL into just the title
+                const title = sourceURL.slice(sourceURL.lastIndexOf('/') + 1).replace(/-\d+(\.\d+)?$/, '')
+                    .replace(/(watch|free)/g, '').replace(year_regex, '').replace(/^-+|-+$/g, '');
 
-        storeLink(url, title)
+                storeLink(url, title)
+            } else {
+                console.log('ignoring non-playlist m3u8 file')
+            }
+
+        }).catch((e) => {
+            console.log('error fetching .m3u8 file: ' + e.message)
+        });
     }
 }
 

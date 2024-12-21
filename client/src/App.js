@@ -31,7 +31,7 @@ const defaultSettings = [
   { key: "normalizeAudio", value: false },
   { key: "useShazam", value: false },
   { key: "generateSubs", value: false },
-  { key: "downloadm3u8", value: false },
+  { key: "useAria2c", value: false },
   { key: "maxDownloads", value: '10' },
 
   { key: "gdriveJSONKey", value: 'C:\\Users\\andre\\OneDrive\\Documents\\Webdev\\descargo\\server\\keys\\yt-dl-443015-d39da117fe4a.json' },
@@ -323,7 +323,7 @@ function App() {
   }
 
   const download_m3u8 = (link, title, index) => {
-    const timestamp = new Date().toISOString();
+    // const timestamp = new Date().toISOString();
     // set the background to green
 
     setM3u8bg((prevbgs) => {
@@ -340,40 +340,42 @@ function App() {
     }, 200)
 
     console.log('downloading ' + link + '...');
-    try {
-      axios.post(`${serverURL}/download_m3u8`, {
-        headers: {
-          'ngrok-skip-browser-warning': '1'
-        },
-        link: link,
-        timestamp: timestamp,
-        title: title,
-        outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
-        gdrive: popupSettingsRef.current[1],
-        gdriveKeyPath: settingsRef.current.find(s => s.key === 'gdriveJSONKey').value,
-        gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value,
-        normalizeAudio: settingsRef.current.find(s => s.key === 'normalizeAudio').value,
-        downloadm3u8: settingsRef.current.find(s => s.key === 'downloadm3u8').value,
-        maxDownloads: settingsRef.current.find(s => s.key === 'maxDownloads').value,
-      }).then((result) => {
-        if (result.data.status === 'error') {
-          //update the history if it times out
-          browser.storage.local.get('history').then((result) => {
-            const updatedHistory = result.history.map(item => {
-              if (item.timestamp === timestamp) {
-                return { ...item, progress: 0, status: 'error' };
-              }
-              return item;
-            });
+    startDownload(link, title)
+    // try {
+    //   axios.post(`${serverURL}/download_m3u8`, {
+    //     headers: {
+    //       'ngrok-skip-browser-warning': '1'
+    //     },
+    //     link: link,
+    //     timestamp: timestamp,
+    //     title: title,
+    //     outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
+    //     gdrive: popupSettingsRef.current[1],
+    //     gdriveKeyPath: settingsRef.current.find(s => s.key === 'gdriveJSONKey').value,
+    //     gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value,
+    //     normalizeAudio: settingsRef.current.find(s => s.key === 'normalizeAudio').value,
+    //     downloadm3u8: settingsRef.current.find(s => s.key === 'downloadm3u8').value,
+    //     maxDownloads: settingsRef.current.find(s => s.key === 'maxDownloads').value,
+    //     generateSubs: settingsRef.current.find(s => s.key === 'generateSubs').value,
+    //   }).then((result) => {
+    //     if (result.data.status === 'error') {
+    //       //update the history if it times out
+    //       browser.storage.local.get('history').then((result) => {
+    //         const updatedHistory = result.history.map(item => {
+    //           if (item.timestamp === timestamp) {
+    //             return { ...item, progress: 0, status: 'error' };
+    //           }
+    //           return item;
+    //         });
 
-            browser.storage.local.set({ history: updatedHistory })
-          });
-        }
-      });
-      addToHistory(link, title + '.mp4', 0, timestamp, 'in-progress');
-    } catch (error) {
-      console.error('Error:', error);
-    }
+    //         browser.storage.local.set({ history: updatedHistory })
+    //       });
+    //     }
+    //   });
+    //   addToHistory(link, title + '.mp4', 0, timestamp, 'in-progress');
+    // } catch (error) {
+    //   console.error('Error:', error);
+    // }
   }
 
   const stopDownload = (timestamp) => {
@@ -412,19 +414,16 @@ function App() {
   };
 
 
-  const submitLink = () => {
-    let currentLink = popupSettingsRef.current[2];
-
-    setResult('loading');
-    if (!currentLink) {
-      setResult('failure');
-      return;
-    }
+  const startDownload = (currentLink, m3u8Title = '') => {
     const timestamp = new Date().toISOString();
+    let format = popupSettingsRef.current[0] ? 'mp4' : 'm4a';
+    if(m3u8Title){
+      format = 'mp4';
+    }
 
     let dlArgs = {
       timestamp: timestamp,
-      format: popupSettingsRef.current[0] ? 'mp4' : 'm4a',
+      format: format,
       gdrive: popupSettingsRef.current[1],
       outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
       gdriveKeyPath: settingsRef.current.find(s => s.key === 'gdriveJSONKey').value,
@@ -435,6 +434,8 @@ function App() {
       cookiePath: settingsRef.current.find(s => s.key === 'cookiePath').value,
       maxDownloads: settingsRef.current.find(s => s.key === 'maxDownloads').value,
       generateSubs: settingsRef.current.find(s => s.key === 'generateSubs').value,
+      m3u8Title: m3u8Title,
+      useAria2c:  settingsRef.current.find(s => s.key === 'useAria2c').value,
     }
 
     // First, determine if the link is a playlist or a video by checking if it contains "playlist"
@@ -471,8 +472,18 @@ function App() {
         setResult('failure');
       }
     }
+  }
 
+  const submitLink = () => {
+    let currentLink = popupSettingsRef.current[2];
 
+    setResult('loading');
+    if (!currentLink) {
+      setResult('failure');
+      return;
+    }
+
+    startDownload(currentLink);
 
     setPopupSettings((prevSettings) => {
       storePopupSettings([prevSettings[0], prevSettings[1], '']);
@@ -534,23 +545,9 @@ function App() {
     }, 150)
 
     if (m3u8) {
-      // clear the m3u8 storage and the local m3u8 folder
+      // clear the m3u8 storage
       browser.storage.local.remove('m3u8_links')
-      try {
-        axios.post(`${serverURL}/clear`, {
-          headers: {
-            'ngrok-skip-browser-warning': '1'
-          },
-          type: 'local-m3u8',
-          outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
-        }).then((response) => {
-          if (response.data.message === 'success') {
-            console.log('successfully cleared m3u8 menu')
-          }
-        });
-      } catch (error) {
-        console.error('Error:', error);
-      }
+      
     } else {
       console.log('clearing history ---------')
       // clear the history storage

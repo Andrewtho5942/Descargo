@@ -20,7 +20,7 @@ let settings = [
   { key: "normalizeAudio", value: false },
   { key: "useShazam", value: false },
   { key: "generateSubs", value: false },
-  { key: "downloadm3u8", value: false },
+  { key: "useAria2c", value: false },
   { key: "maxDownloads", value: '10' },
 
   { key: "gdriveJSONKey", value: 'C:\\Users\\andre\\OneDrive\\Documents\\Webdev\\descargo\\server\\keys\\yt-dl-443015-d39da117fe4a.json' },

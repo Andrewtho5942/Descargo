@@ -8,7 +8,7 @@
 
   --link-bg: rgb(35, 38, 40);
   --download-btn-bg: rgb(8, 79, 40);
-  --download-btn-bg-active: rgb(18, 109, 50);
+  --download-btn-bg-active: rgb(13, 90, 45);
 
   --toggle-bg: rgb(40, 40, 40);
   --toggle-clear: rgb(60, 40, 40);
@@ -34,8 +34,8 @@
   --background-color-table: rgb(255, 255, 255);
   --header-bg: rgb(223, 227, 229);
   --link-bg: rgb(215, 218, 220);
-  --download-btn-bg: rgb(150, 235, 150);
-  --download-btn-bg-active: rgb(130, 235, 130);
+  --download-btn-bg: rgb(120, 205, 120);
+  --download-btn-bg-active: rgb(100, 205, 100);
 
   --toggle-bg: rgb(215, 215, 220);
   --toggle-clear: rgb(230, 215, 215);
@@ -49,7 +49,7 @@
   --text-color: black;
   --text-color-mute: rgb(75, 75, 75);
 
-  --link-shadow: rgba(100, 205, 100, 0.6);
+  --link-shadow: rgba(80, 205, 80, 0.6);
 
   --checkbox-border: rgb(230, 230, 230);
   --checkbox-bg: white;
