@@ -12,6 +12,7 @@ import drive from './images/gd.png';
 import explorer from './images/fe.png';
 import disconnect from './images/disconnect.png'
 import settingsIcon from './images/settings.png'
+import cloudIcon from './images/cloud.png'
 
 
 const defaultSettings = [
@@ -50,11 +51,11 @@ const defaultSettings = [
 ]
 
 function App() {
-  const ISLOCAL = true;
   const SERVER_PORT = 5001;
-  const serverURL = ISLOCAL ? `http://localhost:${SERVER_PORT}` : "https://3a51-156-146-107-197.ngrok-free.app";
+  const cloudServerURL = "https://red-jellyfish-66.telebit.io";
 
   const [result, setResult] = useState('');
+  const [serverURL, setServerURL] = useState(`http://localhost:${SERVER_PORT}`)
   const [popupSettings, setPopupSettings] = useState([false, true, '']); // videoFormat, gdrive, link
   const [m3u8Open, setM3u8Open] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -65,13 +66,14 @@ function App() {
   const [history, setHistory] = useState([]);
   const [m3u8bg, setM3u8bg] = useState([false, false, false]);
   const [menubtnbg, setmenubtnbg] = useState([false, false]);
-  const [disconnectVisible, setDisconnectVisible] = useState([true, false]);
+  const [disconnectVisible, setDisconnectVisible] = useState([true, false]); // disconnected, disconnectedSignVisible
   const [settings, setSettings] = useState([]);
 
 
   const historyRef = useRef(history);
   const popupSettingsRef = useRef(popupSettings);
   const settingsRef = useRef(settings);
+  const serverURLRef = useRef(serverURL)
 
   //update the useRefs
   useEffect(() => {
@@ -83,6 +85,9 @@ function App() {
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
+  useEffect(() => {
+    serverURLRef.current = serverURL;
+  }, [serverURL]);
 
   const storePopupSettings = (newPopupSettings) => {
     browser.storage.local.set({ popupSettings: newPopupSettings }).then(() => {
@@ -149,6 +154,11 @@ function App() {
         console.log('Warning -- Settings length is invalid, using default settings...');
         newSettings = defaultSettings;
       }
+      // update the serverURL based on the cloudMode setting in storage
+      const newServerURL = newSettings.find(s => s.key === 'cloudMode').value ? cloudServerURL : `http://localhost:${SERVER_PORT}`;
+      setServerURL(newServerURL);
+      console.log('assigned new serverURL: ' + newServerURL);
+
       setSettings(newSettings);
 
       // set the dark or light mode
@@ -239,9 +249,9 @@ function App() {
   }, [])
 
 
-  const addToHistory = (file, fileName, progress, timestamp, status) => {
+  const addToHistory = (file, fileName, progress, timestamp, status, task) => {
     let newHistory = historyRef.current;
-    newHistory.unshift({ file, fileName, progress, timestamp, status })
+    newHistory.unshift({ file, fileName, progress, timestamp, status, task })
 
     if (newHistory.length > 25) {
       newHistory = newHistory.slice(0, 25);
@@ -383,13 +393,13 @@ function App() {
 
     // stop the process on the server
     try {
-      axios.post(`${serverURL}/stop_download`, {
+      axios.post(`${serverURLRef.current}/stop_download`, {
         headers: {
           'ngrok-skip-browser-warning': '1'
         },
         timestamp: timestamp
       }).then((result) => {
-        console.log('Stop Download response: ' + result.message);
+        //console.log('Stop Download response: ' + result.message);
       });
     } catch (error) {
       console.error('Error:', error);
@@ -417,7 +427,7 @@ function App() {
   const startDownload = (currentLink, m3u8Title = '') => {
     const timestamp = new Date().toISOString();
     let format = popupSettingsRef.current[0] ? 'mp4' : 'm4a';
-    if(m3u8Title){
+    if (m3u8Title) {
       format = 'mp4';
     }
 
@@ -435,18 +445,19 @@ function App() {
       maxDownloads: settingsRef.current.find(s => s.key === 'maxDownloads').value,
       generateSubs: settingsRef.current.find(s => s.key === 'generateSubs').value,
       m3u8Title: m3u8Title,
-      useAria2c:  settingsRef.current.find(s => s.key === 'useAria2c').value,
+      useAria2c: m3u8Title ? settingsRef.current.find(s => s.key === 'useAria2c').value : false,
     }
 
     // First, determine if the link is a playlist or a video by checking if it contains "playlist"
     if ((currentLink.includes("playlist")) && (currentLink.includes("youtube"))) {
       console.log('playlist detected')
       //video is a playlist
-      axios.post(`${serverURL}/playlist`, {
+      axios.post(`${serverURLRef.current}/playlist`, {
         ...dlArgs,
         playlistURL: currentLink
       }).then((result) => {
         console.log('playlist download ended: ' + result.message);
+        setResult(result.message)
       });
 
     } else {
@@ -454,9 +465,9 @@ function App() {
 
       //regular video
       try {
-        addToHistory(currentLink, 'fetching... ', 0, timestamp, 'in-progress');
+        addToHistory(currentLink, 'fetching... ', 0, timestamp, 'in-progress', 'Downloading...');
 
-        axios.post(`${serverURL}/download`, {
+        axios.post(`${serverURLRef.current}/download`, {
           ...dlArgs,
           url: currentLink,
         }).then((response) => {
@@ -464,7 +475,11 @@ function App() {
           console.log(response.data.message)
           setResult(response.data.message);
         }).catch((e) => {
-          console.error('Error:', e);
+          if (error.response) {
+            console.log('/download Response error:', error.response.data);
+          } else {
+            console.error('/download Request error:', error.message);
+          }
           setResult('failure');
         });
       } catch (error) {
@@ -497,7 +512,7 @@ function App() {
     let setBg = local ? setFileBg1 : setFileBg2
 
     try {
-      axios.post(`${serverURL}/clear`, {
+      axios.post(`${serverURLRef.current}/clear`, {
         headers: {
           'ngrok-skip-browser-warning': '1'
         },
@@ -519,7 +534,7 @@ function App() {
         setBg(color);
 
         // clear the current timeout for this button and set a new timeout to reset the color to white
-        setBg(color, { timeout: 750 })
+        setBg(color, { timeout: 500 })
       });
     } catch (error) {
       console.error('Error:', error);
@@ -547,14 +562,14 @@ function App() {
     if (m3u8) {
       // clear the m3u8 storage
       browser.storage.local.remove('m3u8_links')
-      
+
     } else {
       console.log('clearing history ---------')
       // clear the history storage
       browser.storage.local.remove('history')
 
       try {
-        axios.post(`${serverURL}/kill_processes`, {
+        axios.post(`${serverURLRef.current}/kill_processes`, {
           headers: {
             'ngrok-skip-browser-warning': '1'
           },
@@ -574,25 +589,39 @@ function App() {
     console.log(settingsRef.current);
 
     if (local) {
-      // open file explorer to downloads folder
-      try {
-        axios.post(`${serverURL}/open`, {
-          headers: {
-            'ngrok-skip-browser-warning': '1'
-          },
-          focusExplorerPath: settingsRef.current.find(s => s.key === 'focusExplorerPath').value,
-          AHKPath: settingsRef.current.find(s => s.key === 'AHKPath').value,
-          outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
-        }).then((response) => {
+      console.log('disconnectVisible[0]: ', disconnectVisible[0])
+      if (!disconnectVisible[0]) {
+        //not disconnected
+        // open file explorer to downloads folder
+        try {
+          axios.post(`${serverURLRef.current}/open`, {
+            headers: {
+              'ngrok-skip-browser-warning': '1'
+            },
+            focusExplorerPath: settingsRef.current.find(s => s.key === 'focusExplorerPath').value,
+            AHKPath: settingsRef.current.find(s => s.key === 'AHKPath').value,
+            outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
+          }).then((response) => {
 
-          console.log(response.data.message)
-        });
-      } catch (error) {
-        console.error('Error:', error);
+            console.log(response.data.message)
+          });
+        } catch (error) {
+          console.error('Error:', error);
+        }
+      } else {
+        //disconnected, show error
+        setFileBg1('red');
+        setFileBg1('red', { timeout: 500 });
       }
     } else {
-      const url = `https://drive.google.com/drive/folders/${settingsRef.current.find(s => s.key === 'gdriveFolderID').value}`;
-      window.open(url);
+      const folderID = settingsRef.current.find(s => s.key === 'gdriveFolderID').value
+      if (folderID) {
+        const url = `https://drive.google.com/drive/folders/${folderID}`;
+        window.open(url);
+      } else {
+        setFileBg2('red');
+        setFileBg2('red', { timeout: 500 });
+      }
     }
   }
 
@@ -601,6 +630,8 @@ function App() {
       {(disconnectVisible[0] && disconnectVisible[1]) && <img src={disconnect} alt="disconnected" draggable='false' className='disconnect'></img>}
       <img src={download} alt="youtube" draggable="false" className="dl-img"></img>
       <img src={settingsIcon} alt="settings" draggable="false" className='settings-img' onClick={() => { browser.runtime.openOptionsPage() }}></img>
+      {serverURLRef.current === cloudServerURL && <img src={cloudIcon} alt="cloud" draggable="false" className='cloud-img'></img>}
+
       <span className="header">
         <h1>Descargo</h1>
       </span>
@@ -724,17 +755,22 @@ function App() {
                       : 'rgba(255,0,0,0.08)'
                     )
                 }}>
-                  <td className='history-timestamp' tabIndex="-1"><div className='timestamp-content' tabIndex="-1">{new Date(timestamp).toLocaleTimeString([], {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true,
-                  })}{', '}
-                    {new Date(timestamp).toLocaleDateString([], {
-                      month: '2-digit',
-                      day: '2-digit',
-                      year: 'numeric'
-                    })}
-                  </div></td>
+                  <td className='history-timestamp' tabIndex="-1">
+                    {item.status === 'in-progress' ? <div className='timestamp-content' tabIndex="-1">
+                      {item.task}
+                    </div> : 
+                    <div className='timestamp-content' tabIndex="-1">
+                      {new Date(timestamp).toLocaleTimeString([], {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      hour12: true,
+                    })}{', '}
+                      {new Date(timestamp).toLocaleDateString([], {
+                        month: '2-digit',
+                        day: '2-digit',
+                        year: 'numeric'
+                      })}
+                    </div>}</td>
                   <td className='history-link' tabIndex="-1"><div className='history-content' tabIndex="-1">
                     {item.status === 'in-progress' && <>
                       <span className='progress'>{`${progress}%`}</span> - <button style={{ marginRight: '4px' }} tabIndex="-1" onClick={() => { stopDownload(timestamp) }}>stop</button>

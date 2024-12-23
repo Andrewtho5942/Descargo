@@ -111,7 +111,7 @@ function transcribeWithWhisper(videoPath, jsonPath, file, timestamp, fileName, t
           }
           const progressPercentage = ((endTimeSecs / totalDuration) * 100).toFixed(2)
           console.log('progress: ' + progressPercentage + '%');
-          const message = { progress: progressPercentage, status: 'in-progress', file: file, timestamp: timestamp, fileName: fileName };
+          const message = { progress: progressPercentage, status: 'in-progress', file: file, timestamp: timestamp, fileName: fileName, task: 'Transcribing...' };
           broadcastProgress(message)
         }
       });
@@ -348,12 +348,11 @@ function clearCache(fileName, timestamp) {
   }
 }
 
-
 const processVideoTitle = (title, removeSubtext) => {
   if (removeSubtext) {
     title = title.replace(/(\[.*?\]|\(.*?\))/g, '') // optionally remove any text in brackets or parenthesis
   }
-  return title.replace(/[^a-zA-Z0-9\-',"$'.()[\]*%#@!^{}<>+=&~`; ]/g, '_') // replace special characters with underscores 
+  return title.replace(/[^a-zA-Z0-9\-',$'.()[\]%#@!^{}+=&~`; ]/g, '_') // replace special characters with underscores 
     .replace(/\s+/g, ' ') // replace multiple spaces with a space
     .trim(); //remove trailing and leading whitespace
 };
@@ -375,12 +374,12 @@ const getTitle = (url, cookiePath, newFile, removeSubtext, format) => {
           if (error) {
             console.error(`get title Error: ${error.message}`);
             if (cookiePath && !killOverride) {
-              //try again without cookies
+              console.log('trying again without cookies...')
               getTitleMain(url, '', newFile, removeSubtext, format, storyboardFormat);
               return;
             }
             if (storyboardFormat && !killOverride) {
-              //try again without storyboard format
+              console.log('trying again without specifying format...')
               getTitleMain(url, '', newFile, removeSubtext, format, '');
               return;
             }
@@ -399,9 +398,9 @@ const getTitle = (url, cookiePath, newFile, removeSubtext, format) => {
           return resolve(newFile.value);
         });
       } catch (e) {
-        console.log('error getting title: ' + e.message)
+        console.log('error getting title: ' + e)
         if (cookiePath) {
-          //try again without cookies
+          console.log('trying again without cookies...')
           getTitleMain(url, '', newFile, removeSubtext, format);
           return;
         }
@@ -413,32 +412,97 @@ const getTitle = (url, cookiePath, newFile, removeSubtext, format) => {
   });
 }
 
-const getTitlewShazam = (tempFile, url, cookiePath, newFile, removeSubtext, format) => {
+const extractAudio = (videoFile, outputAudioFile) => {
   return new Promise((resolve, reject) => {
+    console.log(`Extracting audio from ${videoFile}...`);
+    const command = `ffmpeg -i "${videoFile}" -vn -acodec aac -b:a 192k "${outputAudioFile}"`;
+
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Error extracting audio: ${stderr}`);
+        return reject(error);
+      }
+      console.log(`Audio extracted to ${outputAudioFile}`);
+      resolve(outputAudioFile);
+    });
+  });
+};
+
+const getTitlewShazam = (tempFile, url, cookiePath, newFile, removeSubtext, format, m3u8Title) => {
+  return new Promise(async (resolve, reject) => {
     console.log('getting title with shazam...');
     // shazam song recognition
+    let len = 0;
+    if (format === 'mp4') {
+      len = await getTotalDuration(tempFile)
+      if (len < 600) {
+        const audioFilePath = tempFile.replace(/\.[^/.]+$/, '.m4a');
+        deleteFileIfExists(audioFilePath);
+
+        // if the format is a video, extract the audio and use that for shazam
+        try {
+          await extractAudio(tempFile, audioFilePath);
+          tempFile = audioFilePath;
+        } catch (e) {
+          console.log('ERROR extracting audio for shazam: ' + e);
+          if (m3u8Title) {
+            console.log('falling back to the original m3u8 title...');
+            return resolve({ title: m3u8Title });
+          } else {
+            console.log('using yt-dlp to fetch and clean the title...');
+            const yt_title = await getTitle(url, cookiePath, newFile, removeSubtext, format);
+            return resolve({ title: yt_title });
+          }
+        }
+      }
+    }
+
+    console.log('\n\ntempfile: ' + tempFile + '\n')
 
     shazam.recognise(tempFile, 'en-US').then(async (result) => {
       if (result) {
+        console.log('shazam result: ')
+        console.log(result)
+
         const newTitle = result.track.subtitle + ' - ' + result.track.title;
 
         const processedTitle = processVideoTitle(newTitle, removeSubtext);
         console.log('found song: ' + processedTitle + ' | link: ' + result.track.url);
         newFile.value = processedTitle + '.' + format;
-        return resolve(newFile.value);
+
+        const metadata = {
+          title: result.track.title,
+          artist: result.track.subtitle,
+          genre: result.track.genres?.primary || 'Unknown Genre',
+          comment: `${result.track.url}`
+        };
+
+        if ((format === 'mp4') && (len < 300)) deleteFileIfExists(tempFile)
+        return resolve({ title: newFile.value, metadata: metadata });
       } else {
         // no song found by shazam, fall back on using yt-dlp to fetch the title
         console.log('No song found by shazam! Fetching yt title...')
         const yt_title = await getTitle(url, cookiePath, newFile, removeSubtext, format)
-        return resolve(yt_title);
+
+        if ((format === 'mp4') && (len < 300)) deleteFileIfExists(tempFile)
+        return resolve({ title: yt_title });
       }
     }).catch(async (e) => {
-      console.log('ERROR getting title with shazam: ' + e.message);
-      console.log('using yt-dlp to fetch and clean the title...');
+      console.log('ERROR getting title with shazam: ' + e);
+      if (m3u8Title) {
+        console.log('falling back to the original m3u8 title...');
 
-      // fall back on using yt-dlp to fetch the title
-      const yt_title = await getTitle(url, cookiePath, newFile, removeSubtext, format);
-      return resolve(yt_title);
+        if ((format === 'mp4') && (len < 300)) deleteFileIfExists(tempFile)
+        return resolve({ title: m3u8Title });
+      } else {
+        console.log('using yt-dlp to fetch and clean the title...');
+
+        // fall back on using yt-dlp to fetch the title
+        const yt_title = await getTitle(url, cookiePath, newFile, removeSubtext, format);
+
+        if ((format === 'mp4') && (len < 300)) deleteFileIfExists(tempFile)
+        return resolve({ title: yt_title });
+      }
     });
   });
 }
@@ -454,14 +518,15 @@ function processFFMPEGLine(fileName, url, lines, totalDuration, timestamp) {
 
         console.log(`ffmpeg progress: ${progressPercentage.toFixed(2)}%`);
 
-        const message = { progress: progressPercentage.toFixed(2), status: 'in-progress', file: url, timestamp: timestamp, fileName: fileName };
+        const message = { progress: progressPercentage.toFixed(2), status: 'in-progress', file: url, timestamp: timestamp, fileName: fileName, task: 'Normalizing...' };
         broadcastProgress(message)
       }
     }
   }
 }
 
-async function finishUpload(generateSubs, format, gdrive, resolve, filePath, newFile, gdriveFolderID, gdriveKeyPath, url, timestamp, start) {
+async function finishUpload(generateSubs, format, gdrive, resolve, filePath, newFile, gdriveFolderID,
+  gdriveKeyPath, url, timestamp, start) {
 
   try {
     let permPath = downloadsPath + '\\' + newFile.value;
@@ -492,16 +557,15 @@ async function finishUpload(generateSubs, format, gdrive, resolve, filePath, new
     clearCache(newFile.value, timestamp,);
     console.log(`yt-dlp completed successfully.`);
 
-    // send completion message to client and service worker
-    broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed', fileName: newFile.value });
-    //setTimeout(() => { }, 500); //wait half a second to make sure broadcast sent
-
-    console.log('DEBUG -_-_-_-_ SENT COMPLETION BROADCAST: ' + newFile.value);
     let durationSecs = Math.round((Date.now() - start) / 1000);
     const minutes = Math.trunc(durationSecs / 60).toString().padStart(2, '0');
     const seconds = (durationSecs % 60).toString().padStart(2, '0');
+    const timeString = `${minutes}:${seconds}`
+    // send completion message to client and service worker
+    broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed', fileName: newFile.value, timeSpent: timeString });
 
-    console.log(`Download time: ${minutes}:${seconds}`);
+    console.log('DEBUG -_-_-_-_ SENT COMPLETION BROADCAST: ' + newFile.value);
+    console.log(`Download time: ${timeString}`);
     delete activeProcesses[timestamp];
     resolve({ message: 'success', file: url, timestamp: timestamp, fileName: newFile.value });
 
@@ -541,7 +605,7 @@ function ytdlpDownload(bodyObject) {
 
 
       // Construct yt-dlp command arguments
-      let args = [`"${url}"`, '-o', `"${tempFilePath}"`]//, '--progress-template', '"Downloading: %(progress._percent_str)s @ %(progress.speed)s ETA %(progress.eta)s"'];
+      let args = [`"${url}"`, '-o', `"${tempFilePath}"`];
 
       if (cookiePath) {
         args.push('--cookies', `"${cookiePath.replace(/\\/g, '/')}"`);
@@ -549,12 +613,13 @@ function ytdlpDownload(bodyObject) {
 
       // use aria2c to download the video concurrently 24 segments at a time
       if (useAria2c) {
-        args.push('--external-downloader', 'aria2c', '--external-downloader-args', '"--console-log-level=notice --max-concurrent-downloads=24 --max-tries=3 --retry-wait=2 -k 2M"')
-        // args.push('--concurrent-fragments', '24',
-        //   '--retries', '3',
-        //   '--fragment-retries', '3',
-        //   '--http-chunk-size', '2M',
-        //   '--hls-use-mpegts')
+        // args.push('--external-downloader', 'aria2c', '--external-downloader-args', 
+        //   '"--console-log-level=notice --max-concurrent-downloads=8 --max-tries=10 --retry-wait=3 -k 2M --continue -l C:\\Users\\andre\\Downloads\\Descargo\\aria2c.log"',
+        //    '--retries', '10', '--fragment-retries', '10', '--verbose')
+        args.push('--progress-template', '"Downloading: %(progress._percent_str)s @ %(progress.speed)s ETA %(progress.eta)s"',
+          '--concurrent-fragments', '8',
+          '--retries', '10',
+          '--fragment-retries', '10')
       }
 
       if (format === 'mp4') {
@@ -566,6 +631,9 @@ function ytdlpDownload(bodyObject) {
       console.log('spawning yt-dlp..')
       console.log(args)
 
+
+      let prevData = -1;
+      let noRestart = false;
       // Initialize yt-dlp process
       const ytDlpProcess = spawn('yt-dlp', args
         , {
@@ -596,9 +664,6 @@ function ytdlpDownload(bodyObject) {
         });
       });
 
-      let prevData = -1;
-      let numLines = 0;
-      let totalLines = 1;
       // Listen to yt-dlp stdout for progress updates
       ytDlpProcess.stdout.on('data', (data) => {
         const lines = data.toString().split('\n');
@@ -607,18 +672,21 @@ function ytdlpDownload(bodyObject) {
           // Example yt-dlp progress line:
           // [download]   1.2% of 10.00MiB at 1.00MiB/s ETA 00:09
           if (useAria2c) {
-            console.log('stdout: ' + line)
             try {
-              if (line.includes('Download complete:')) {
-                numLines++;
-                const progressPercent = Math.min(((numLines / totalLines) * 100).toFixed(2), 100);
-                console.log('aria2c progress: ' + progressPercent)
-                // Broadcast progress to clients with timestamp
-                const message = { progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value };
-                broadcastProgress(message)
-              } else if (line.includes('Downloading') && line.includes('item(s)')) {
-                totalLines = parseInt(line.split('] ')[1].split(' ')[1]);
-                console.log('### Found total lines: ' + totalLines);
+              if (line.includes('Downloading: ')) {
+                const progressPercent = line.match(/Downloading:\s+(\d+(\.\d+)?)%/)[1];
+                if (prevData != progressPercent) {
+                  prevData = progressPercent;
+                  console.log('aria2c progress: ' + progressPercent)
+
+                  // Broadcast progress to clients with timestamp
+                  const message = { progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Downloading...' };
+                  broadcastProgress(message)
+                }
+              } else if (line.includes('fragment not found; Skipping fragment ')) {
+                noRestart = true;
+              } else {
+                console.log('stdout: ' + line)
               }
             } catch (e) {
               console.log('ERROR in aria2c progress parsing: ' + e.message);
@@ -632,9 +700,11 @@ function ytdlpDownload(bodyObject) {
                 prevData = progressPercent;
                 console.log('ytdlp progress: ' + progressPercent);
                 // Broadcast progress to clients with timestamp
-                const message = { progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value };
+                const message = { progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Downloading...' };
                 broadcastProgress(message)
               }
+            } else if (line.includes('Giving up after ')) {
+              noRestart = true;
             }
           }
         });
@@ -642,7 +712,7 @@ function ytdlpDownload(bodyObject) {
 
 
       ytDlpProcess.on('close', async (code) => {
-        if (code !== 0) {
+        if (code !== 0 && !noRestart) {
           console.error(`error: yt-dlp exited with code ${code}`);
 
           //retry the yt-dlp process but without cookies
@@ -677,7 +747,7 @@ function ytdlpDownload(bodyObject) {
         // start the shazam call
         let shazamPromise = null;
         if (useShazam) {
-          shazamPromise = getTitlewShazam(tempFilePath, url, cookiePath, newFile, removeSubtext, format);
+          shazamPromise = getTitlewShazam(tempFilePath, url, cookiePath, newFile, removeSubtext, format, m3u8Title);
         }
 
         //optionally normalize the audio
@@ -751,6 +821,7 @@ function ytdlpDownload(bodyObject) {
                   resolve(errorMessage);
                   return;
                 }
+
                 filePath = newShazamPath;
               }
 
@@ -759,8 +830,6 @@ function ytdlpDownload(bodyObject) {
               return;
             }
           });
-
-
 
         } else {
           // rename the file with shazam API from gettitlewshazam or rename it with ytdlp
@@ -791,7 +860,8 @@ function ytdlpDownload(bodyObject) {
             return;
           }
 
-          finishUpload(generateSubs, format, gdrive, resolve, filePath, newFile, gdriveFolderID, gdriveKeyPath, url, timestamp, start);
+          finishUpload(generateSubs, format, gdrive, resolve, filePath, newFile, gdriveFolderID, gdriveKeyPath,
+            url, timestamp, start);
 
           return;
         }
@@ -1031,7 +1101,7 @@ app.post('/playlist', (req, res) => {
     if (error) {
       const message = 'ERR in flatten playlist - ' + error.message;
       console.log(message);
-      res.send({ message: message });
+      res.send({ message: 'error' });
       return;
     }
 
@@ -1082,7 +1152,7 @@ app.post('/playlist', (req, res) => {
     console.log('All downloads are completed!')
     const message = { status: 'playlist-completed', playlistName: playlistName };
     broadcastProgress(message)
-    res.send({ message: 'playlist downloaded successfully!' })
+    res.send({ message: 'success' })
   });
 });
 
@@ -1239,13 +1309,14 @@ app.post('/download_m3u8', async (req, res) => {
 
           clearCache(permFile, timestamp);
           console.log(`m3u8 ffmpeg completed successfully.`);
+          let timeSpent = Math.round((Date.now() - start) / 1000)
 
           // send completion message to client and service worker
-          broadcastProgress({ progress: 100, timestamp: timestamp, file: link, status: 'completed', fileName: permFile });
+          broadcastProgress({ progress: 100, timestamp: timestamp, file: link, status: 'completed', fileName: permFile, timeSpent: timeSpent });
           //setTimeout(() => { }, 500); //wait half a second to make sure broadcast sent
 
           console.log('DEBUG -_-_-_-_ SENT COMPLETION BROADCAST: ' + permFile);
-          console.log(`regular m3u8 download of ${permFile} took ${Math.round((Date.now() - start) / 1000)} seconds.`)
+          console.log(`regular m3u8 download of ${permFile} took ${timeSpent} seconds.`)
 
           delete activeProcesses[timestamp];
           return resolve({ message: 'success', file: link, timestamp: timestamp, fileName: permFile });

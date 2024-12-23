@@ -1,5 +1,8 @@
 
 const SERVER_PORT = 5001;
+const cloudServerURL = 'https://red-jellyfish-66.telebit.io'
+let serverURL = `http://localhost:${SERVER_PORT}`
+
 let disconnected = true;
 browser.storage.local.set({ disconnect: true });
 
@@ -137,7 +140,7 @@ function handleProgressUpdate(data) {
     if ((data.progress === 100) && (data.status === 'completed')) {
         console.log('DEBUG -_-_-_-_ RECEIVED COMPLETION BROADCAST: ' + data.fileName);
         browser.storage.local.get('settings').then((result) => {
-            sendNotification(result, data, '✓ Descargo Finished', `Finished Downloading ${truncateString(data.fileName, 30)}`);
+            sendNotification(result, data, '✓ Descargo Finished', `Finished Downloading ${truncateString(data.fileName, 30)}  |  time: ${data.timeSpent}`);
         });
         newStatus = 'completed';
     }
@@ -159,15 +162,20 @@ function handleProgressUpdate(data) {
 
         // Update or add the item in history
         const index = updatedHistory.findIndex(item => item.timestamp === data.timestamp);
+
+        console.log('got data:');
+        console.log(data)
+
         if (index !== -1) {
-            updatedHistory[index] = { ...updatedHistory[index], progress: data.progress, status: newStatus, fileName: data.fileName };
+            updatedHistory[index] = { ...updatedHistory[index], progress: data.progress, status: newStatus, fileName: data.fileName, task:data.task || 'none' };
         } else if (newStatus !== 'error') {
             updatedHistory.unshift({
                 timestamp: data.timestamp,
                 progress: data.progress || 0,
                 status: newStatus,
                 fileName: data.fileName || 'unknown',
-                file: data.file || 'unknown'
+                file: data.file || 'unknown',
+                task: data.task || 'none'
             });
         }
 
@@ -207,7 +215,7 @@ function handlePlaylistCompleted(data) {
 function createEventSource() {
     console.log('opening sse connection...')
     // Start the SSE connection
-    const eventSource = new EventSource(`http://localhost:${SERVER_PORT}/progress`);
+    const eventSource = new EventSource(serverURL + `/progress`);
 
     eventSource.onmessage = (event) => {
         const data = JSON.parse(event.data);

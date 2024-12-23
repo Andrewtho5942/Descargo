@@ -1,7 +1,7 @@
 
-const ISLOCAL = true;
-const SERVER_PORT = 5001;
-const serverURL = ISLOCAL ? `http://localhost:${SERVER_PORT}` : "https://3a51-156-146-107-197.ngrok-free.app";
+//const ISLOCAL = true;
+//const SERVER_PORT = 5001;
+// const serverURL = ISLOCAL ? `http://localhost:${SERVER_PORT}` : "https://3a51-156-146-107-197.ngrok-free.app";
 
 let settings = [
   { key: "AHKPath", value: 'C:\\Program Files\\AutoHotkey\\v2\\AutoHotkey.exe' },

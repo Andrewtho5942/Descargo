@@ -107,6 +107,14 @@ h1 {
   cursor: pointer;
 }
 
+.cloud-img {
+  width: 22px;
+  height: 22px;
+  position: absolute;
+  left: 50px;
+  top: 12px;
+}
+
 .settings-img :not(:hover) {
   transform: rotate(0deg);
 }
