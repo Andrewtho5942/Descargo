@@ -2,16 +2,19 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const { exec, spawn } = require('child_process');
-const kill = require('tree-kill');
+const axios = require('axios');
+
+const os = require('os');
 const fs = require('fs-extra');
 const fs_promises = require('fs').promises;
+
+const kill = require('tree-kill');
 const { google } = require('googleapis');
 const path = require('path');
-const axios = require('axios');
-const os = require('os');
 const { Shazam } = require('node-shazam');
 const shazam = new Shazam();
 const util = require('util');
+
 const execAsync = util.promisify(exec);
 
 process.env.LANG = 'en_US.UTF-8';
@@ -525,11 +528,26 @@ function processFFMPEGLine(fileName, url, lines, totalDuration, timestamp) {
   }
 }
 
+function findPermPath(desiredFileName, format) {
+  let permPath = `${downloadsPath}\\${desiredFileName}`;
+  index = 0;
+
+  let desiredName = desiredFileName.slice(0, desiredFileName.lastIndexOf('.'))
+  console.log('desiredName: ' + desiredName)
+
+  // increment the permpath index until it finds a name that isnt already taken 
+  while (fs.existsSync(permPath)) {
+    index++;
+    permPath = `${downloadsPath}\\${desiredName}_${index}.${format}`
+  }
+  return permPath;
+}
+
 async function finishUpload(generateSubs, format, gdrive, resolve, filePath, newFile, gdriveFolderID,
   gdriveKeyPath, url, timestamp, start) {
 
   try {
-    let permPath = downloadsPath + '\\' + newFile.value;
+    let permPath = findPermPath(newFile.value, format);
 
     //move the file from temp to downloads OR generate the subtitles and write the mp4 with subititles to the permPath
     if (generateSubs && (format === 'mp4')) {
@@ -906,7 +924,6 @@ function getTotalDuration(input) {
 
 
 
-
 // stop a specific download
 app.post('/stop_download', async (req, res) => {
   try {
@@ -1156,6 +1173,24 @@ app.post('/playlist', (req, res) => {
   });
 });
 
+
+
+// start the server
+app.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
+});
+
+
+
+
+
+
+
+
+
+
+
+// ------------ deprecated code ------------
 
 
 // download a m3u8 file (obsolete)
@@ -1497,7 +1532,3 @@ async function downloadWAria2c(inputM3u8, outputMp4) {
 
 //downloadWAria2c()
 
-// start the server
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-});

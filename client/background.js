@@ -2,6 +2,7 @@
 const SERVER_PORT = 5001;
 const cloudServerURL = 'https://red-jellyfish-66.telebit.io'
 let serverURL = `http://localhost:${SERVER_PORT}`
+let eventSource = null;
 
 let disconnected = true;
 browser.storage.local.set({ disconnect: true });
@@ -167,7 +168,7 @@ function handleProgressUpdate(data) {
         console.log(data)
 
         if (index !== -1) {
-            updatedHistory[index] = { ...updatedHistory[index], progress: data.progress, status: newStatus, fileName: data.fileName, task:data.task || 'none' };
+            updatedHistory[index] = { ...updatedHistory[index], progress: data.progress, status: newStatus, fileName: data.fileName, task: data.task || 'none' };
         } else if (newStatus !== 'error') {
             updatedHistory.unshift({
                 timestamp: data.timestamp,
@@ -213,9 +214,13 @@ function handlePlaylistCompleted(data) {
 }
 
 function createEventSource() {
+
+    if (eventSource) {
+        eventSource.close();
+    }
     console.log('opening sse connection...')
     // Start the SSE connection
-    const eventSource = new EventSource(serverURL + `/progress`);
+    eventSource = new EventSource(serverURL + `/progress`);
 
     eventSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
@@ -250,7 +255,9 @@ function createEventSource() {
         handleEventSourceError();
 
         //close the current connection and retry after 5 seconds
+
         eventSource.close()
+        eventSource = null;
         setTimeout(() => {
             console.log("### service worker: attempting to reconnect to server");
             createEventSource();
@@ -260,4 +267,150 @@ function createEventSource() {
 }
 
 //initial connection to server
-createEventSource();
+browser.storage.local.get('settings').then((result) => {
+    console.log('got initial settings:')
+    console.log(result)
+    if (result.settings) {
+        let cloudMode = result.settings.find(s => s.key === 'cloudMode').value;
+        if (cloudMode !== null) {
+            serverURL = cloudMode ? cloudServerURL : `http://localhost:${SERVER_PORT}`;
+        } else {
+            serverURL = `http://localhost:${SERVER_PORT}`;
+        }
+    } else {
+        serverURL = `http://localhost:${SERVER_PORT}`;
+    }
+    createEventSource();
+});
+
+// listen for storage changes and re-create the eventSource if needed
+browser.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.settings) {
+
+        let newSettings = changes.settings.newValue
+        console.log('new settings: ')
+        console.log(newSettings)
+
+        let cloudMode = newSettings.find(s => s.key === 'cloudMode').value;
+
+        // detect changes in cloudMode setting
+        if ((cloudMode !== null) &&
+            ((cloudMode && serverURL.startsWith('http://localhost')) ||
+                (!cloudMode && (serverURL === cloudServerURL)))) {
+            console.log('cloudMode changed to ', cloudMode);
+            serverURL = cloudMode ? cloudServerURL : `http://localhost:${SERVER_PORT}`;
+        }
+
+        // Recreate the EventSource with the new serverURL
+        createEventSource();
+    }
+});
+
+
+
+
+// ---- communication with the content script ------
+
+const defaultSettings = [
+    { key: "AHKPath", value: '' },
+    { key: "focusExplorerPath", value: '' },
+    { key: "darkMode", value: true },
+    { key: "cloudMode", value: false },
+
+    { key: "m3u8Notifs", value: true },
+    { key: "mp4Notifs", value: false },
+    { key: "m4aNotifs", value: false },
+    { key: "failureNotifs", value: false },
+    { key: "playlistNotifs", value: true },
+
+    { key: "outputPath", value: '' },
+    { key: "removeSubtext", value: true },
+    { key: "normalizeAudio", value: false },
+    { key: "useShazam", value: false },
+    { key: "generateSubs", value: false },
+    { key: "useAria2c", value: false },
+    { key: "maxDownloads", value: '10' },
+
+    { key: "gdriveJSONKey", value: '' },
+    { key: "gdriveFolderID", value: '' },
+    { key: "cookiePath", value: "" },
+
+    { key: "submitHotkey", value: 'Enter' },
+    { key: "formatHotkey", value: 'p' },
+    { key: "gdriveHotkey", value: 'g' },
+    { key: "getMenuHotkey", value: 'n' },
+    { key: "historyMenuHotkey", value: 'm' },
+    { key: "openClearHotkey", value: 'o' },
+    { key: "backHotkey", value: 'Backspace' },
+    { key: "autofillHotkey", value: 'f' },
+    { key: "settingsHotkey", value: 's' },
+]
+
+const addToHistory = (file, fileName, progress, timestamp, status, task) => {
+    console.log('adding to history from content script...')
+    chrome.storage.local.get('history', (result) => {
+
+        let newHistory = result.history;
+        newHistory.unshift({ file, fileName, progress, timestamp, status, task })
+
+        if (newHistory.length > 25) {
+            newHistory = newHistory.slice(0, 25);
+        }
+
+        browser.storage.local.set({ history: newHistory }).then(() => {
+            console.log('Stored history:', newHistory[0]);
+        });
+    });
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'downloadVideo') {
+        const { currentLink } = message.payload;
+
+        // Fetch settings from local storage or any source
+        chrome.storage.local.get('settings', (result) => {
+            chrome.storage.local.get('popupSettings', (result2) => {
+
+                let settings = result.settings || defaultSettings;
+                let popupSettings = result2.popupSettings || [false, true, ''];
+                let timestamp = Date.now();
+
+                let dlArgs = {
+                    timestamp: timestamp,
+                    format: popupSettings[0] ? 'mp4' : 'm4a',
+                    gdrive: popupSettings[1],
+                    outputPath: settings.find(s => s.key === 'outputPath').value,
+                    gdriveKeyPath: settings.find(s => s.key === 'gdriveJSONKey').value,
+                    gdriveFolderID: settings.find(s => s.key === 'gdriveFolderID').value,
+                    removeSubtext: settings.find(s => s.key === 'removeSubtext').value,
+                    normalizeAudio: settings.find(s => s.key === 'normalizeAudio').value,
+                    useShazam: settings.find(s => s.key === 'useShazam').value,
+                    cookiePath: settings.find(s => s.key === 'cookiePath').value,
+                    maxDownloads: settings.find(s => s.key === 'maxDownloads').value,
+                    generateSubs: settings.find(s => s.key === 'generateSubs').value,
+                    m3u8Title: '',
+                    useAria2c: false
+                }
+
+                addToHistory(currentLink, 'fetching... ', 0, timestamp, 'in-progress', 'Downloading...');
+
+                // Make the axios request to the server
+                axios.post(`${serverURL}/download`, {
+                    ...dlArgs,
+                    url: currentLink,
+                }).then((response) => {
+                    console.log('Download started:', response.data);
+                    sendResponse({ success: true });
+                }).catch((error) => {
+                    console.error('Error starting download:', error.message);
+                    sendResponse({ success: false, error: error.message });
+                });
+            });
+        });
+
+        // Return true to keep the message channel open for asynchronous response
+        return true;
+    }
+});
+
+

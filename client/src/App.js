@@ -16,8 +16,8 @@ import cloudIcon from './images/cloud.png'
 
 
 const defaultSettings = [
-  { key: "AHKPath", value: 'C:\\Program Files\\AutoHotkey\\v2\\AutoHotkey.exe' },
-  { key: "focusExplorerPath", value: 'C:\\Users\\andre\\focusExplorer.ahk' },
+  { key: "AHKPath", value: '' },
+  { key: "focusExplorerPath", value: '' },
   { key: "darkMode", value: true },
   { key: "cloudMode", value: false },
 
@@ -27,7 +27,7 @@ const defaultSettings = [
   { key: "failureNotifs", value: false },
   { key: "playlistNotifs", value: true },
 
-  { key: "outputPath", value: 'C:\\Users\\andre\\Downloads\\Descargo' },
+  { key: "outputPath", value: '' },
   { key: "removeSubtext", value: true },
   { key: "normalizeAudio", value: false },
   { key: "useShazam", value: false },
@@ -35,9 +35,9 @@ const defaultSettings = [
   { key: "useAria2c", value: false },
   { key: "maxDownloads", value: '10' },
 
-  { key: "gdriveJSONKey", value: 'C:\\Users\\andre\\OneDrive\\Documents\\Webdev\\descargo\\server\\keys\\yt-dl-443015-d39da117fe4a.json' },
-  { key: "gdriveFolderID", value: '17pMCBUQxJfEYgVvNwKQUcS8n4oRGIE9q' },
-  { key: "cookiePath", value: "C:\\Users\\andre\\OneDrive\\Documents\\cookies.firefox-private.txt" },
+  { key: "gdriveJSONKey", value: '' },
+  { key: "gdriveFolderID", value: '' },
+  { key: "cookiePath", value: "" },
 
   { key: "submitHotkey", value: 'Enter' },
   { key: "formatHotkey", value: 'p' },
@@ -474,7 +474,8 @@ function App() {
           console.log('download response: ')
           console.log(response.data.message)
           setResult(response.data.message);
-        }).catch((e) => {
+        }).catch((error) => {
+          console.log('download error: ' + error)
           if (error.response) {
             console.log('/download Response error:', error.response.data);
           } else {
@@ -758,19 +759,19 @@ function App() {
                   <td className='history-timestamp' tabIndex="-1">
                     {item.status === 'in-progress' ? <div className='timestamp-content' tabIndex="-1">
                       {item.task}
-                    </div> : 
-                    <div className='timestamp-content' tabIndex="-1">
-                      {new Date(timestamp).toLocaleTimeString([], {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                      hour12: true,
-                    })}{', '}
-                      {new Date(timestamp).toLocaleDateString([], {
-                        month: '2-digit',
-                        day: '2-digit',
-                        year: 'numeric'
-                      })}
-                    </div>}</td>
+                    </div> :
+                      <div className='timestamp-content' tabIndex="-1">
+                        {new Date(timestamp).toLocaleTimeString([], {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true,
+                        })}{', '}
+                        {new Date(timestamp).toLocaleDateString([], {
+                          month: '2-digit',
+                          day: '2-digit',
+                          year: 'numeric'
+                        })}
+                      </div>}</td>
                   <td className='history-link' tabIndex="-1"><div className='history-content' tabIndex="-1">
                     {item.status === 'in-progress' && <>
                       <span className='progress'>{`${progress}%`}</span> - <button style={{ marginRight: '4px' }} tabIndex="-1" onClick={() => { stopDownload(timestamp) }}>stop</button>

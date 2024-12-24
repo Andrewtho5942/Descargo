@@ -19,6 +19,7 @@
   ],
   "background": {
     "scripts": [
+      "axios.min.js",
       "background.js"
     ]
   },
@@ -31,5 +32,11 @@
       "id": "andrewtho5942_yt_dl@gmail.com"
     }
   },
-    "options_page": "settings/settings.html"
+    "options_page": "settings/settings.html",
+    "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/watch*"],
+      "js": ["content.js"]
+    }
+  ]
 }
