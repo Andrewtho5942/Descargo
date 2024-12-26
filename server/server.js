@@ -549,7 +549,7 @@ async function finishUpload(generateSubs, format, gdrive, resolve, filePath, new
   try {
     let permPath = findPermPath(newFile.value, format);
     console.log('permPath: ' + permPath);
-    
+
     //move the file from temp to downloads OR generate the subtitles and write the mp4 with subititles to the permPath
     if (generateSubs && (format === 'mp4')) {
       await generateSubtitles(filePath, permPath, url, timestamp, newFile.value);
@@ -756,6 +756,7 @@ function ytdlpDownload(bodyObject) {
             newFile.value = Date.parse(timestamp) + '.' + format;
           }
         } else {
+          broadcastProgress({ progress: 100, status: 'in-progress', file: url, timestamp: timestamp, fileName: 'fetching... ', task: 'Renaming...' })
           await titlePromise;
           console.log(' ------------- cleaned title: ' + newFile.value)
         }
@@ -854,6 +855,7 @@ function ytdlpDownload(bodyObject) {
           // rename the file with shazam API from gettitlewshazam or rename it with ytdlp
           try {
             if (useShazam && shazamPromise) {
+              broadcastProgress({ progress: 100, status: 'in-progress', file: url, timestamp: timestamp, fileName: 'fetching... ', task: 'Renaming...' })
               await shazamPromise;
               console.log('got title with shazam: ' + newFile.value);
               let newShazamPath = tempFolderPath + '\\' + newFile.value;

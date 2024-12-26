@@ -6,6 +6,8 @@ let eventSource = null;
 
 const activeIconPath = './src/images/dl_icon_active.png'
 const iconPath = './src/images/dl.png'
+let activeIconShowing = false;
+
 
 let disconnected = true;
 browser.storage.local.set({ disconnect: true });
@@ -42,12 +44,13 @@ function handleM3U8Request(details) {
         nonRepeatFlag = false;
         return;
     }
+
     const url = details.url;
     if (url.endsWith('.m3u8')) {
         nonRepeatFlag = true;
         fetch(url).then((response) => response.text()).then((content) => {
-            // Check if the content has #EXT-X-STREAM-INF to identify it as a playlist
-            if (content.includes('#EXT-X-STREAM-INF')) {
+            // Check if the content has #EXTINF to identify it as a streaming file (non-playlist)
+            if (content.includes('#EXTINF')) {
                 const sourceURL = details.frameAncestors[0].url
                 const currentYear = new Date().getFullYear().toString();
                 const year_regex = new RegExp(`\\b${currentYear}\\b`, 'g');
@@ -74,7 +77,6 @@ browser.webRequest.onBeforeRequest.addListener(
     { urls: ["<all_urls>"] },
     []
 );
-
 
 
 
@@ -145,6 +147,7 @@ function updateIconIfNeeded(historyData) {
         }).catch((error) => {
             console.log('error changing icon: ' + error);
         });
+        activeIconShowing = false;
     }
 }
 
@@ -204,9 +207,17 @@ function handleProgressUpdate(data) {
         browser.storage.local.set({ historyUpdater: Date.now() })
         console.log('Updated history in storage.');
 
-        //update the icon if the download stopped
+        //update the icon as needed
         if (newStatus !== 'in-progress') {
             updateIconIfNeeded(updatedHistory);
+        } else if (!activeIconShowing) {
+            // update icon
+            browser.browserAction.setIcon({ path: activeIconPath }).then(() => {
+                console.log('icon changed successfully to ' + activeIconPath);
+            }).catch((error) => {
+                console.log('error changing icon: ' + error);
+            });
+            activeIconShowing = true;
         }
     });
 
@@ -307,8 +318,6 @@ browser.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.settings) {
 
         let newSettings = changes.settings.newValue
-        console.log('new settings: ')
-        console.log(newSettings)
 
         let cloudMode = newSettings.find(s => s.key === 'cloudMode').value;
 
@@ -318,10 +327,10 @@ browser.storage.onChanged.addListener((changes, area) => {
                 (!cloudMode && (serverURL === cloudServerURL)))) {
             console.log('cloudMode changed to ', cloudMode);
             serverURL = cloudMode ? cloudServerURL : `http://localhost:${SERVER_PORT}`;
-        }
 
-        // Recreate the EventSource with the new serverURL
-        createEventSource();
+            // Recreate the EventSource with the new serverURL
+            createEventSource();
+        }
     }
 });
 
@@ -393,7 +402,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 let settings = result.settings || defaultSettings;
                 let popupSettings = result2.popupSettings || [false, true, ''];
                 let timestamp = Date.now();
-
+                console.log('timestamp:')
+                console.log(timestamp)
+                
                 let dlArgs = {
                     timestamp: timestamp,
                     format: popupSettings[0] ? 'mp4' : 'm4a',
@@ -412,12 +423,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 }
 
                 addToHistory(currentLink, 'fetching... ', 0, timestamp, 'in-progress', 'Downloading...');
-                // update icon
-                browser.browserAction.setIcon({ path: activeIconPath }).then(() => {
-                    console.log('icon changed successfully to ' + activeIconPath);
-                }).catch((error) => {
-                    console.log('error changing icon: ' + error);
-                });
 
                 // Make the axios request to the server
                 axios.post(`${serverURL}/download`, {

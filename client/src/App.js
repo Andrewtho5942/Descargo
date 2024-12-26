@@ -14,9 +14,6 @@ import disconnect from './images/disconnect.png'
 import settingsIcon from './images/settings.png'
 import cloudIcon from './images/cloud.png'
 
-const activeIconPath = './images/dl_icon_active.png'
-
-
 const defaultSettings = [
   { key: "AHKPath", value: '' },
   { key: "focusExplorerPath", value: '' },
@@ -418,12 +415,6 @@ function App() {
     // First, determine if the link is a playlist or a video by checking if it contains "playlist"
     if ((currentLink.includes("playlist")) && (currentLink.includes("youtube"))) {
       console.log('playlist detected')
-      // update icon
-      browser.browserAction.setIcon({ path: activeIconPath }).then(() => {
-        console.log('icon changed successfully to ' + activeIconPath);
-      }).catch((error) => {
-        console.log('error changing icon: ' + error);
-      });
 
       //video is a playlist
       axios.post(`${serverURLRef.current}/playlist`, {
@@ -440,12 +431,7 @@ function App() {
       //regular video
       try {
         addToHistory(currentLink, 'fetching... ', 0, timestamp, 'in-progress', 'Downloading...');
-        // update icon
-        browser.browserAction.setIcon({ path: activeIconPath }).then(() => {
-          console.log('icon changed successfully to ' + activeIconPath);
-        }).catch((error) => {
-          console.log('error changing icon: ' + error);
-        });
+        
         axios.post(`${serverURLRef.current}/download`, {
           ...dlArgs,
           url: currentLink,

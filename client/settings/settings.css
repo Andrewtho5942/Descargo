@@ -6,6 +6,7 @@
     --background-color: rgb(22, 23, 26);
     --container-bg: rgb(31, 32, 35);
     --container-bg-hover: rgb(31, 47, 35);
+    --footer-color: rgba(15,15,15,0.8);
 
 
     --header-bg: rgba(20, 20, 20, 0.9);
@@ -32,6 +33,7 @@
     --header-outline: rgb(245, 245, 245);
     --container-bg: rgb(221, 222, 225);
     --container-bg-hover: rgb(221, 237, 225);
+    --footer-color: rgba(240,240,240,0.8);
 
 
     --text-color: black;
@@ -307,4 +309,48 @@ input:checked+.slider:before {
     opacity: 0;
     width: 0;
     height: 0;
+}
+
+.footer {
+    background-color: var(--footer-color);
+    text-align: center;
+    padding:20px;
+    position: fixed;
+    bottom: 0;
+    left:0;
+    width: 100%;
+    transition: background-color 0.3s ease;
+}
+
+.footer a {
+    color: rgb(75, 185, 44);
+}
+
+/* Hide footer when the checkbox is checked */
+#close-footer:checked ~ .footer {
+    display: none;
+}
+
+/* Close button */
+.close-btn {
+    color: var(--text-color);
+    border: 1px solid var(--text-color);
+    padding:2px 6px;
+    margin-left:15px;
+    border-radius: 5px;
+    width: 20px;
+    height: 20px;
+    text-align: center;
+    line-height: 18px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    text-decoration: none;
+    font-weight: bolder;
+    transition: color 0.2s ease, border 0.2s ease;
+}
+
+.close-btn:hover {
+    color: rgb(75, 185, 44);
+    border: 1px solid rgb(75, 185, 44);
 }
