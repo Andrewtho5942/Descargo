@@ -4,6 +4,9 @@ const cloudServerURL = 'https://red-jellyfish-66.telebit.io'
 let serverURL = `http://localhost:${SERVER_PORT}`
 let eventSource = null;
 
+const activeIconPath = './src/images/dl_icon_active.png'
+const iconPath = './src/images/dl.png'
+
 let disconnected = true;
 browser.storage.local.set({ disconnect: true });
 
@@ -75,7 +78,6 @@ browser.webRequest.onBeforeRequest.addListener(
 
 
 
-
 function sendNotification(result, data, title, message) {
     if ((result.settings.find(s => s.key === 'm3u8Notifs').value && data.file.endsWith('.m3u8')) ||
         (result.settings.find(s => s.key === 'm4aNotifs').value && data.fileName.endsWith('.m4a')) ||
@@ -135,6 +137,18 @@ function handleEventSourceError() {
     });
 }
 
+function updateIconIfNeeded(historyData) {
+    if (!historyData.some(i => i.status === 'in-progress')) {
+        // update icon
+        browser.browserAction.setIcon({ path: iconPath }).then(() => {
+            console.log('icon changed successfully to ' + iconPath);
+        }).catch((error) => {
+            console.log('error changing icon: ' + error);
+        });
+    }
+}
+
+
 function handleProgressUpdate(data) {
     let newStatus = data.status;
 
@@ -189,6 +203,11 @@ function handleProgressUpdate(data) {
 
         browser.storage.local.set({ historyUpdater: Date.now() })
         console.log('Updated history in storage.');
+
+        //update the icon if the download stopped
+        if (newStatus !== 'in-progress') {
+            updateIconIfNeeded(updatedHistory);
+        }
     });
 
 }
@@ -393,6 +412,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 }
 
                 addToHistory(currentLink, 'fetching... ', 0, timestamp, 'in-progress', 'Downloading...');
+                // update icon
+                browser.browserAction.setIcon({ path: activeIconPath }).then(() => {
+                    console.log('icon changed successfully to ' + activeIconPath);
+                }).catch((error) => {
+                    console.log('error changing icon: ' + error);
+                });
 
                 // Make the axios request to the server
                 axios.post(`${serverURL}/download`, {

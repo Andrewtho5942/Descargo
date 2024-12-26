@@ -14,6 +14,8 @@ import disconnect from './images/disconnect.png'
 import settingsIcon from './images/settings.png'
 import cloudIcon from './images/cloud.png'
 
+const activeIconPath = './images/dl_icon_active.png'
+
 
 const defaultSettings = [
   { key: "AHKPath", value: '' },
@@ -351,41 +353,6 @@ function App() {
 
     console.log('downloading ' + link + '...');
     startDownload(link, title)
-    // try {
-    //   axios.post(`${serverURL}/download_m3u8`, {
-    //     headers: {
-    //       'ngrok-skip-browser-warning': '1'
-    //     },
-    //     link: link,
-    //     timestamp: timestamp,
-    //     title: title,
-    //     outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
-    //     gdrive: popupSettingsRef.current[1],
-    //     gdriveKeyPath: settingsRef.current.find(s => s.key === 'gdriveJSONKey').value,
-    //     gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value,
-    //     normalizeAudio: settingsRef.current.find(s => s.key === 'normalizeAudio').value,
-    //     downloadm3u8: settingsRef.current.find(s => s.key === 'downloadm3u8').value,
-    //     maxDownloads: settingsRef.current.find(s => s.key === 'maxDownloads').value,
-    //     generateSubs: settingsRef.current.find(s => s.key === 'generateSubs').value,
-    //   }).then((result) => {
-    //     if (result.data.status === 'error') {
-    //       //update the history if it times out
-    //       browser.storage.local.get('history').then((result) => {
-    //         const updatedHistory = result.history.map(item => {
-    //           if (item.timestamp === timestamp) {
-    //             return { ...item, progress: 0, status: 'error' };
-    //           }
-    //           return item;
-    //         });
-
-    //         browser.storage.local.set({ history: updatedHistory })
-    //       });
-    //     }
-    //   });
-    //   addToHistory(link, title + '.mp4', 0, timestamp, 'in-progress');
-    // } catch (error) {
-    //   console.error('Error:', error);
-    // }
   }
 
   const stopDownload = (timestamp) => {
@@ -451,6 +418,13 @@ function App() {
     // First, determine if the link is a playlist or a video by checking if it contains "playlist"
     if ((currentLink.includes("playlist")) && (currentLink.includes("youtube"))) {
       console.log('playlist detected')
+      // update icon
+      browser.browserAction.setIcon({ path: activeIconPath }).then(() => {
+        console.log('icon changed successfully to ' + activeIconPath);
+      }).catch((error) => {
+        console.log('error changing icon: ' + error);
+      });
+
       //video is a playlist
       axios.post(`${serverURLRef.current}/playlist`, {
         ...dlArgs,
@@ -466,7 +440,12 @@ function App() {
       //regular video
       try {
         addToHistory(currentLink, 'fetching... ', 0, timestamp, 'in-progress', 'Downloading...');
-
+        // update icon
+        browser.browserAction.setIcon({ path: activeIconPath }).then(() => {
+          console.log('icon changed successfully to ' + activeIconPath);
+        }).catch((error) => {
+          console.log('error changing icon: ' + error);
+        });
         axios.post(`${serverURLRef.current}/download`, {
           ...dlArgs,
           url: currentLink,
