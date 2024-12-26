@@ -125,10 +125,19 @@ function handleEventSourceError() {
         if (result.history) {
             const updatedHistory = result.history.map(item => {
                 if (item.status === 'in-progress') {
-                    return { ...item, progress: 0, status: 'error' };
+                    return { ...item, progress: 0, status: 'error', error: 'server disconnected!' };
                 }
                 return item;
             });
+            
+            // set icon to default
+            browser.browserAction.setIcon({ path: iconPath }).then(() => {
+                console.log('icon changed successfully to ' + iconPath);
+            }).catch((error) => {
+                console.log('error changing icon: ' + error);
+            });
+
+            activeIconShowing = false;
             browser.storage.local.set({ history: updatedHistory }).then(() => {
                 //console.log('set new history to storage.');
             });
@@ -185,7 +194,10 @@ function handleProgressUpdate(data) {
         console.log(data)
 
         if (index !== -1) {
-            updatedHistory[index] = { ...updatedHistory[index], progress: data.progress, status: newStatus, fileName: data.fileName, task: data.task || 'none' };
+            updatedHistory[index] = {
+                ...updatedHistory[index], progress: data.progress, status: newStatus, error: data.error || 'none',
+                fileName: data.fileName, task: data.task || 'none'
+            };
         } else if (newStatus !== 'error') {
             updatedHistory.unshift({
                 timestamp: data.timestamp,
@@ -404,7 +416,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 let timestamp = Date.now();
                 console.log('timestamp:')
                 console.log(timestamp)
-                
+
                 let dlArgs = {
                     timestamp: timestamp,
                     format: popupSettings[0] ? 'mp4' : 'm4a',

@@ -590,7 +590,7 @@ async function finishUpload(generateSubs, format, gdrive, resolve, filePath, new
 
   } catch (e) {
     console.log('ERR completing download: ' + e.message);
-    broadcastProgress({ progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value });
+    broadcastProgress({ progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error:e.message });
     delete activeProcesses[timestamp];
     resolve({ message: 'failure', file: url, timestamp: timestamp, fileName: newFile.value });
   }
@@ -741,7 +741,7 @@ function ytdlpDownload(bodyObject) {
             return;
           }
 
-          const message = { progress: 0, status: 'error', file: url, timestamp: timestamp, fileName: newFile.value };
+          const message = { progress: 0, status: 'error', file: url, timestamp: timestamp, fileName: newFile.value, error:'error in ytdlp' };
           broadcastProgress(message);
           clearCache(newFile.value, timestamp)
           delete activeProcesses[timestamp];
@@ -814,7 +814,7 @@ function ytdlpDownload(bodyObject) {
               delete activeProcesses[timestamp];
 
               // notify clients of error
-              const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value };
+              const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error:'error in ffmpeg' };
               broadcastProgress(errorMessage);
               resolve(errorMessage);
               return;
@@ -836,7 +836,7 @@ function ytdlpDownload(bodyObject) {
                   delete activeProcesses[timestamp];
 
                   // notify clients of error
-                  const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value };
+                  const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error:'error renaming file' };
                   broadcastProgress(errorMessage);
                   resolve(errorMessage);
                   return;
@@ -875,7 +875,7 @@ function ytdlpDownload(bodyObject) {
             delete activeProcesses[timestamp];
 
             // notify clients of error
-            const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value };
+            const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error:'error renaming file' };
             broadcastProgress(errorMessage);
             resolve(errorMessage);
             return;
@@ -890,7 +890,7 @@ function ytdlpDownload(bodyObject) {
 
       ytDlpProcess.on('error', (error) => {
         console.error(`Error executing yt-dlp: ${error.message}`);
-        broadcastProgress({ progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value });
+        broadcastProgress({ progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error:'error executing ytdlp' });
         delete activeProcesses[timestamp];
         resolve({ message: 'failure', timestamp: timestamp });
         return;

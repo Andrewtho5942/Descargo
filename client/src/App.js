@@ -431,7 +431,7 @@ function App() {
       //regular video
       try {
         addToHistory(currentLink, 'fetching... ', 0, timestamp, 'in-progress', 'Downloading...');
-        
+
         axios.post(`${serverURLRef.current}/download`, {
           ...dlArgs,
           url: currentLink,
@@ -721,6 +721,7 @@ function App() {
                       : 'rgba(255,0,0,0.08)'
                     )
                 }}>
+
                   <td className='history-timestamp' tabIndex="-1">
                     {item.status === 'in-progress' ? <div className='timestamp-content' tabIndex="-1">
                       {item.task}
@@ -738,6 +739,7 @@ function App() {
                         })}
                       </div>}</td>
                   <td className='history-link' tabIndex="-1"><div className='history-content' tabIndex="-1">
+                    {item.status === 'error' && <>{'E: ' + (item.error || 'unknown') + ' | '}</>}
                     {item.status === 'in-progress' && <>
                       <span className='progress'>{`${progress}%`}</span> - <button style={{ marginRight: '4px' }} tabIndex="-1" onClick={() => { stopDownload(timestamp) }}>stop</button>
                     </>}{fileName + ': '}{isURL ? <a href={file} tabIndex="-1">{file}</a> : file}
@@ -752,7 +754,6 @@ function App() {
           </tbody>
         </table>
         {(history.length === 0) && <div className='menu-empty'> No history found! </div>}
-
       </div>
     </div >
   );
