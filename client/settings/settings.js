@@ -83,6 +83,7 @@ function updateFromStorage() {
       console.log('settings has incorrect length! storing the default values...');
       storage.set({ ['settings']: settings });
     }
+    storage.set({ ['cloudMode']: settings.find(s => s.key === 'cloudMode').value })
 
     setInputValues();
     setHotkeyLabels();
@@ -116,6 +117,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (settings[i].key === 'darkMode') {
           document.documentElement.setAttribute('data-theme', settings[i].value ? 'dark' : 'light')
+        } else if (settings[i].key === 'cloudMode') {
+          storage.set({ ['cloudMode']: settings[i].value })
         }
       });
 
@@ -227,53 +230,6 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
   }
-
-  // add submit listeners for playlist-input
-  // const playlistForm = document.getElementById('playlist-form');
-  // const playlistInput = document.getElementById('playlist-input');
-  // const playlistBtn = document.getElementById('playlist-btn');
-
-  // function handleStartPlaylist(event) {
-  //   event.preventDefault();
-
-  //   console.log('starting playlist download: ' + playlistInput.value);
-
-
-  //   //get the current popupSettings from local storage
-  //   storage.get("popupSettings", (result) => {
-  //     let popupSettings = result.popupSettings;
-  //     if (!popupSettings) {
-  //       popupSettings = [false, true]
-  //     }
-  //     // playlist request to the server
-  //     axios.post(`${serverURL}/playlist`, {
-  //       playlistURL: playlistInput.value,
-  //       format: result.popupSettings[0] ? 'mp4' : 'm4a',
-  //       gdrive: result.popupSettings[1],
-  //       outputPath: settings.find(s => s.key === 'outputPath').value,
-  //       gdriveKeyPath: settings.find(s => s.key === 'gdriveJSONKey').value,
-  //       gdriveFolderID: settings.find(s => s.key === 'gdriveFolderID').value,
-  //       removeSubtext: settings.find(s => s.key === 'removeSubtext').value,
-  //       normalizeAudio: settings.find(s => s.key === 'normalizeAudio').value,
-  //       useShazam: settings.find(s => s.key === 'useShazam').value,
-  //       cookiePath: settings.find(s => s.key === 'cookiePath').value,
-  //     }).then((result) => {
-  //       console.log('playlist download ended: ' + result.message);
-  //     });
-
-  //     // update the storage with the empty playlist value
-  //     playlistInput.value = '';
-  //     settings.find(s => s.key === 'playlistLink').value = '';
-  //     storage.set({ ['settings']: settings });
-  //   })
-  // }
-
-  // if (playlistForm) {
-  //   playlistForm.addEventListener('submit', handleStartPlaylist)
-  // }
-  // if (playlistBtn) {
-  //   playlistBtn.addEventListener('click', handleStartPlaylist)
-  // }
 });
 
 

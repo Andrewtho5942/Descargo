@@ -1,16 +1,127 @@
 
 const SERVER_PORT = 5001;
-const cloudServerURL = 'https://red-jellyfish-66.telebit.io'
+const cloudServerURL = "https://descargo-tunnel.andrewtho5942.xyz";//"https://red-jellyfish-66.telebit.io";
 let serverURL = `http://localhost:${SERVER_PORT}`
 let eventSource = null;
 
 const activeIconPath = './src/images/dl_icon_active.png'
 const iconPath = './src/images/dl.png'
 let activeIconShowing = false;
+browser.storage.local.set({ activeIconShowing: false });
 
 
 let disconnected = true;
 browser.storage.local.set({ disconnect: true });
+
+
+// download with requests from popup
+browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
+    return new Promise((resolve, reject) => {
+        if (message.type === 'DOWNLOAD_VIDEO') {
+            console.log('got download video request from popup');
+
+            const { payload } = message;
+            console.log('payload: ', payload)
+            // Post to /download on the server
+            axios.post(`${payload.serverURL}/download`, {
+                ...payload
+            }, { responseType: 'blob' }).then(async (result) => {
+                console.log('received server response: ', result);
+
+                const blob = result.data;
+                if ((blob.type === 'video/mp4')) {
+                    const blobUrl = URL.createObjectURL(blob);
+                    console.log('blobURL: ' + blobUrl)
+
+                    // extract the filename from the response
+                    let fileName = 'untitled.mp4';
+                    const contentDisposition = result.headers['content-disposition'];
+                    if (contentDisposition) {
+                        const matches = /filename="([^"]+)"/.exec(contentDisposition);
+                        if (matches && matches[1]) {
+                            fileName = matches[1];
+                        }
+                    }
+                    try {
+                        await browser.downloads.download({
+                            url: blobUrl,
+                            filename: fileName
+                        });
+                        resolve({ message: 'success' })
+                    } catch (error) {
+                        console.error('Failed to start download:', error);
+                        resolve({ message: 'failure' })
+                    }
+                } else if (blob.type === 'application/json') {
+                    const text = await blob.text();
+                    const json = JSON.parse(text);
+                    console.log('response json:');
+                    console.log(json);
+                    resolve({ message: json.message })
+                } else {
+                    console.log('ERR: unknown blob type: ' + blob.type);
+                    resolve({ message: 'success' });
+                }
+            }).catch((err) => {
+                console.error('Service worker DOWNLOAD_VIDEO error:', err);
+                resolve({ message: 'failure' });
+            });
+
+        }
+
+        if (message.type === 'DOWNLOAD_PLAYLIST') {
+            console.log('got download playlist request from popup');
+
+            const { payload } = message;
+            // Post to /playlist on the server
+            axios.post(`${payload.serverURL}/playlist`, {
+                ...payload
+            }, { responseType: 'blob' }).then(async (result) => {
+                console.log('playlist finished: ', result)
+                const blob = result.data;
+
+                if ((blob.type === 'application/zip')) {
+                    const blobUrl = URL.createObjectURL(blob);
+                    console.log('blobURL: ' + blobUrl)
+
+                    // extract the filename from the response
+                    let fileName = 'untitled.mp4';
+                    const contentDisposition = result.headers['content-disposition'];
+                    if (contentDisposition) {
+                        const matches = /filename="([^"]+)"/.exec(contentDisposition);
+                        if (matches && matches[1]) {
+                            fileName = matches[1];
+                        }
+                    }
+                    try {
+                        await browser.downloads.download({
+                            url: blobUrl,
+                            filename: fileName
+                        });
+                    } catch (error) {
+                        console.error('Failed to start download:', error);
+                    }
+                    resolve({ message: 'success' });
+                } else if (blob.type === 'application/json') {
+                    const text = await blob.text();
+                    const json = JSON.parse(text);
+                    console.log('response json:');
+                    console.log(json);
+                    resolve({ message: json.message })
+                } else {
+                    console.log('ERR: unknown blob type: ' + blob.type);
+                    resolve({ message: 'failure' });
+                }
+            }).catch((err) => {
+                console.error('Service worker DOWNLOAD_PLAYLIST error:', err);
+                resolve({ message: 'failure' });
+            });
+
+        }
+    });
+});
+
+
 
 
 function storeLink(link, title) {
@@ -39,6 +150,7 @@ function truncateString(str, len) {
 }
 
 let nonRepeatFlag = false;
+
 function handleM3U8Request(details) {
     if (nonRepeatFlag) {
         nonRepeatFlag = false;
@@ -98,6 +210,17 @@ function sendNotification(result, data, title, message) {
 }
 
 
+// update popup icon
+function updateIcon(isActive) {
+    let localIconPath = isActive ? activeIconPath : iconPath;
+    browser.browserAction.setIcon({ path: localIconPath }).then(() => {
+        console.log('icon changed successfully to ' + localIconPath);
+    }).catch((error) => {
+        console.log('error changing icon: ' + error);
+    });
+    activeIconShowing = isActive;
+}
+
 
 const storageUpdateQueue = [];
 let isProcessingQueue = false;
@@ -106,6 +229,8 @@ function enqueueStorageUpdate(updateFunc) {
     storageUpdateQueue.push(updateFunc);
     processStorageQueue();
 }
+
+
 
 function processStorageQueue() {
     if (isProcessingQueue || storageUpdateQueue.length === 0) return;
@@ -119,6 +244,8 @@ function processStorageQueue() {
     });
 }
 
+
+
 function handleEventSourceError() {
     // set all of the status in-progress downloads to error
     browser.storage.local.get('history').then((result) => {
@@ -129,13 +256,9 @@ function handleEventSourceError() {
                 }
                 return item;
             });
-            
+
             // set icon to default
-            browser.browserAction.setIcon({ path: iconPath }).then(() => {
-                console.log('icon changed successfully to ' + iconPath);
-            }).catch((error) => {
-                console.log('error changing icon: ' + error);
-            });
+            browser.storage.local.set({ activeIconShowing: false });
 
             activeIconShowing = false;
             browser.storage.local.set({ history: updatedHistory }).then(() => {
@@ -148,17 +271,7 @@ function handleEventSourceError() {
     });
 }
 
-function updateIconIfNeeded(historyData) {
-    if (!historyData.some(i => i.status === 'in-progress')) {
-        // update icon
-        browser.browserAction.setIcon({ path: iconPath }).then(() => {
-            console.log('icon changed successfully to ' + iconPath);
-        }).catch((error) => {
-            console.log('error changing icon: ' + error);
-        });
-        activeIconShowing = false;
-    }
-}
+
 
 
 function handleProgressUpdate(data) {
@@ -221,19 +334,18 @@ function handleProgressUpdate(data) {
 
         //update the icon as needed
         if (newStatus !== 'in-progress') {
-            updateIconIfNeeded(updatedHistory);
+            if (!updatedHistory.some(i => i.status === 'in-progress')) {
+                browser.storage.local.set({ activeIconShowing: false });
+            }
+
         } else if (!activeIconShowing) {
-            // update icon
-            browser.browserAction.setIcon({ path: activeIconPath }).then(() => {
-                console.log('icon changed successfully to ' + activeIconPath);
-            }).catch((error) => {
-                console.log('error changing icon: ' + error);
-            });
-            activeIconShowing = true;
+            browser.storage.local.set({ activeIconShowing: true });
         }
     });
 
 }
+
+
 
 function handlePlaylistCompleted(data) {
     console.log('A playlist finished downloading!');
@@ -254,6 +366,8 @@ function handlePlaylistCompleted(data) {
         }
     });
 }
+
+
 
 function createEventSource() {
 
@@ -308,6 +422,8 @@ function createEventSource() {
 
 }
 
+
+
 //initial connection to server
 browser.storage.local.get('settings').then((result) => {
     console.log('got initial settings:')
@@ -327,11 +443,9 @@ browser.storage.local.get('settings').then((result) => {
 
 // listen for storage changes and re-create the eventSource if needed
 browser.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && changes.settings) {
+    if (area === 'local' && changes.cloudMode) {
 
-        let newSettings = changes.settings.newValue
-
-        let cloudMode = newSettings.find(s => s.key === 'cloudMode').value;
+        let cloudMode = changes.cloudMode.newValue;
 
         // detect changes in cloudMode setting
         if ((cloudMode !== null) &&
@@ -343,8 +457,14 @@ browser.storage.onChanged.addListener((changes, area) => {
             // Recreate the EventSource with the new serverURL
             createEventSource();
         }
+    } else if (area === 'local' && changes.activeIconShowing) {
+        console.log('activeIconShowing changed to ', changes.activeIconShowing.newValue);
+        activeIconShowing = changes.activeIconShowing.newValue;
+        updateIcon(activeIconShowing);
     }
 });
+
+
 
 
 
@@ -403,7 +523,9 @@ const addToHistory = (file, fileName, progress, timestamp, status, task) => {
     });
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+
+
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'downloadVideo') {
         const { currentLink } = message.payload;
 
@@ -441,11 +563,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                     ...dlArgs,
                     url: currentLink,
                 }).then((response) => {
-                    console.log('Download started:', response.data);
-                    sendResponse({ success: true });
+                    console.log('Download finished:', response.data);
+                    sendResponse({ message: 'success' });
                 }).catch((error) => {
                     console.error('Error starting download:', error.message);
-                    sendResponse({ success: false, error: error.message });
+                    sendResponse({ message: 'failure', error: error.message });
                 });
             });
         });
@@ -454,5 +576,3 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 });
-
-

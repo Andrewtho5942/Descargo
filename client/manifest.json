@@ -15,6 +15,7 @@
     "webRequest",
     "webRequestBlocking",
     "notifications",
+    "downloads",
     "<all_urls>"
   ],
   "background": {

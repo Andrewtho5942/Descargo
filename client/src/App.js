@@ -51,7 +51,7 @@ const defaultSettings = [
 
 function App() {
   const SERVER_PORT = 5001;
-  const cloudServerURL = "https://red-jellyfish-66.telebit.io";
+  const cloudServerURL = "https://descargo-tunnel.andrewtho5942.xyz";//"https://red-jellyfish-66.telebit.io";
 
   const [result, setResult] = useState('');
   const [serverURL, setServerURL] = useState(`http://localhost:${SERVER_PORT}`)
@@ -174,8 +174,6 @@ function App() {
   useEffect(() => {
     console.log('mounting storage listener')
     function handleStorageChange(changes, area) {
-      //console.log('storage changed: ')
-      //console.log(changes)
 
       // update the m3u8 links
       if (area === 'local' && changes.m3u8_links) {
@@ -358,9 +356,6 @@ function App() {
     // stop the process on the server
     try {
       axios.post(`${serverURLRef.current}/stop_download`, {
-        headers: {
-          'ngrok-skip-browser-warning': '1'
-        },
         timestamp: timestamp
       }).then((result) => {
         //console.log('Stop Download response: ' + result.message);
@@ -370,11 +365,15 @@ function App() {
     }
 
     // update the history in local storage to delete that entry
-    browser.storage.local.set({ history: historyRef.current.filter(item => item.timestamp !== timestamp) }).then(() => {
+    let newHistory = historyRef.current.filter(item => item.timestamp !== timestamp);
+    if (!newHistory.some(i => i.status === 'in-progress')) {
+      browser.storage.local.set({ activeIconShowing: false });
+    }
+
+    browser.storage.local.set({ history: newHistory }).then(() => {
       console.log('removed download from history in storage')
     });
     browser.storage.local.set({ historyUpdater: Date.now() });
-
   }
 
 
@@ -386,7 +385,6 @@ function App() {
       return ([prevSettings[0], prevSettings[1], newText]);
     })
   };
-
 
   const startDownload = (currentLink, m3u8Title = '') => {
     const timestamp = new Date().toISOString();
@@ -411,41 +409,52 @@ function App() {
       m3u8Title: m3u8Title,
       useAria2c: m3u8Title ? settingsRef.current.find(s => s.key === 'useAria2c').value : false,
     }
+    // Check if the link is a YT playlist
+    const isYoutubePlaylist = (currentLink.includes("playlist")) && (currentLink.includes("youtube"));
 
-    // First, determine if the link is a playlist or a video by checking if it contains "playlist"
-    if ((currentLink.includes("playlist")) && (currentLink.includes("youtube"))) {
-      console.log('playlist detected')
+    if (isYoutubePlaylist) {
+      console.log('playlist detected');
 
-      //video is a playlist
-      axios.post(`${serverURLRef.current}/playlist`, {
-        ...dlArgs,
-        playlistURL: currentLink
-      }).then((result) => {
-        console.log('playlist download ended: ' + result.message);
-        setResult(result.message)
-      });
+      // Ask the service worker to handle the playlist download
+      browser.runtime.sendMessage({
+        type: 'DOWNLOAD_PLAYLIST',
+        payload: {
+          ...dlArgs,
+          playlistURL: currentLink,
+          serverURL: serverURLRef.current
+        }
+      }).then((response) => {
+        console.log('playlist download ended: ', response);
+        setResult(response.message);
+      })
+        .catch((error) => {
+          console.error('playlist download error: ', error);
+          setResult('failure');
+        });
 
     } else {
-      console.log('video detected')
+      console.log('video detected');
 
-      //regular video
       try {
         addToHistory(currentLink, 'fetching... ', 0, timestamp, 'in-progress', 'Downloading...');
 
-        axios.post(`${serverURLRef.current}/download`, {
-          ...dlArgs,
-          url: currentLink,
-        }).then((response) => {
-          console.log('download response: ')
-          console.log(response.data.message)
-          setResult(response.data.message);
-        }).catch((error) => {
-          console.log('download error: ' + error)
-          if (error.response) {
-            console.log('/download Response error:', error.response.data);
-          } else {
-            console.error('/download Request error:', error.message);
+        // Ask the service worker to handle the video download
+        browser.runtime.sendMessage({
+          type: 'DOWNLOAD_VIDEO',
+          payload: {
+            ...dlArgs,
+            url: currentLink,
+            serverURL: serverURLRef.current
           }
+        }).then((response) => {
+          console.log('download response: ', response);
+          if (response === true) {
+            setResult('loading');
+          } else {
+            setResult(response.message);
+          }
+        }).catch((error) => {
+          console.error('download error: ', error);
           setResult('failure');
         });
       } catch (error) {
@@ -453,7 +462,7 @@ function App() {
         setResult('failure');
       }
     }
-  }
+  };
 
   const submitLink = () => {
     let currentLink = popupSettingsRef.current[2];
@@ -479,9 +488,6 @@ function App() {
 
     try {
       axios.post(`${serverURLRef.current}/clear`, {
-        headers: {
-          'ngrok-skip-browser-warning': '1'
-        },
         type: local ? 'local-downloads' : 'gdrive-downloads',
         outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
         gdriveKeyPath: settingsRef.current.find(s => s.key === 'gdriveJSONKey').value,
@@ -501,6 +507,7 @@ function App() {
 
         // clear the current timeout for this button and set a new timeout to reset the color to white
         setBg(color, { timeout: 500 })
+
       });
     } catch (error) {
       console.error('Error:', error);
@@ -531,14 +538,14 @@ function App() {
 
     } else {
       console.log('clearing history ---------')
+      // update the iconShowing state in storage to change the icon in the service worker
+      browser.storage.local.set({ activeIconShowing: false });
+
       // clear the history storage
       browser.storage.local.remove('history')
 
       try {
         axios.post(`${serverURLRef.current}/kill_processes`, {
-          headers: {
-            'ngrok-skip-browser-warning': '1'
-          },
         }).then((response) => {
           console.log('done killing processes: ')
           console.log(response)
@@ -561,9 +568,6 @@ function App() {
         // open file explorer to downloads folder
         try {
           axios.post(`${serverURLRef.current}/open`, {
-            headers: {
-              'ngrok-skip-browser-warning': '1'
-            },
             focusExplorerPath: settingsRef.current.find(s => s.key === 'focusExplorerPath').value,
             AHKPath: settingsRef.current.find(s => s.key === 'AHKPath').value,
             outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
@@ -701,7 +705,6 @@ function App() {
           </tbody>
         </table>
         {(m3u8Links.length === 0) && <div className='menu-empty'> No m3u8 links detected! </div>}
-
       </div>
 
       <div className={`history-menu collapsible-menu ${historyOpen ? 'open' : 'closed'}`} tabIndex="-1">

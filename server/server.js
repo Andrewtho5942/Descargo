@@ -20,6 +20,17 @@ const execAsync = util.promisify(exec);
 process.env.LANG = 'en_US.UTF-8';
 
 
+const app = express();
+const PORT = 5001;
+
+// middleware
+app.use(cors());
+app.use(bodyParser.json());
+
+
+
+// global variables
+
 let max_concurrent_downloads = 10;
 let num_downloads = 0;
 let abortAllPlaylists = false;
@@ -27,7 +38,7 @@ let killOverride = false;
 
 
 let downloadsPath = "";
-let tempFolderPath = "C:\\Users\\andre\\Downloads\\Descargo\\temp";
+let tempFolderPath = "";
 
 
 let activeProcesses = {};
@@ -35,12 +46,6 @@ let activeProcesses = {};
 
 let clients = [];
 
-const app = express();
-const PORT = 5001;
-
-// middleware
-app.use(cors());
-app.use(bodyParser.json());
 
 
 // send a message to every client
@@ -329,7 +334,7 @@ function clearCache(fileName, timestamp) {
     // Read all files in the directory
     fs.readdir(tempFolderPath, (err, files) => {
       if (err) {
-        console.error(`Error reading directory ${directory}:`, err);
+        console.error(`Error reading directory ${tempFolderPath}:`, err);
         return;
       }
 
@@ -415,22 +420,6 @@ const getTitle = (url, cookiePath, newFile, removeSubtext, format) => {
   });
 }
 
-const extractAudio = (videoFile, outputAudioFile) => {
-  return new Promise((resolve, reject) => {
-    console.log(`Extracting audio from ${videoFile}...`);
-    const command = `ffmpeg -i "${videoFile}" -vn -acodec aac -b:a 192k "${outputAudioFile}"`;
-
-    exec(command, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`Error extracting audio: ${stderr}`);
-        return reject(error);
-      }
-      console.log(`Audio extracted to ${outputAudioFile}`);
-      resolve(outputAudioFile);
-    });
-  });
-};
-
 const getTitlewShazam = (tempFile, url, cookiePath, newFile, removeSubtext, format, m3u8Title) => {
   return new Promise(async (resolve, reject) => {
     console.log('getting title with shazam...');
@@ -509,6 +498,23 @@ const getTitlewShazam = (tempFile, url, cookiePath, newFile, removeSubtext, form
     });
   });
 }
+
+
+const extractAudio = (videoFile, outputAudioFile) => {
+  return new Promise((resolve, reject) => {
+    console.log(`Extracting audio from ${videoFile}...`);
+    const command = `ffmpeg -i "${videoFile}" -vn -acodec aac -b:a 192k "${outputAudioFile}"`;
+
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Error extracting audio: ${stderr}`);
+        return reject(error);
+      }
+      console.log(`Audio extracted to ${outputAudioFile}`);
+      resolve(outputAudioFile);
+    });
+  });
+};
 
 function processFFMPEGLine(fileName, url, lines, totalDuration, timestamp) {
   for (let i = 0; i < lines.length - 1; i++) {
@@ -1121,7 +1127,7 @@ app.post('/playlist', (req, res) => {
     if (error) {
       const message = 'ERR in flatten playlist - ' + error.message;
       console.log(message);
-      res.send({ message: 'error' });
+      res.send({ message: 'failure' });
       return;
     }
 
