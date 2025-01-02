@@ -4,7 +4,7 @@ import axios from 'axios';
 import { useTimeoutState } from './useTimeoutState';
 import validator from 'validator'
 
-import download from './images/dl.png';
+import download from './images/dl_icon.png';
 import loadingGif from './images/loading.gif';
 import xmark from './images/x.png';
 import checkmark from './images/check.png';
@@ -15,10 +15,10 @@ import settingsIcon from './images/settings.png'
 import cloudIcon from './images/cloud.png'
 
 const defaultSettings = [
-  { key: "AHKPath", value: '' },
-  { key: "focusExplorerPath", value: '' },
   { key: "darkMode", value: true },
   { key: "cloudMode", value: false },
+  { key: "AHKPath", value: '' },
+  { key: "focusExplorerPath", value: '' },
 
   { key: "m3u8Notifs", value: true },
   { key: "mp4Notifs", value: false },
@@ -37,6 +37,8 @@ const defaultSettings = [
   { key: "gdriveJSONKey", value: '' },
   { key: "gdriveFolderID", value: '' },
   { key: "cookiePath", value: "" },
+  { key: "gdriveKeyText", value: "" },
+  { key: "cookieText", value: "" },
 
   { key: "submitHotkey", value: 'Enter' },
   { key: "formatHotkey", value: 'p' },
@@ -392,18 +394,21 @@ function App() {
     if (m3u8Title) {
       format = 'mp4';
     }
+    const cloudMode = !serverURLRef.current.startsWith('http://localhost')
+
+    console.log('cloudMode: ' + cloudMode)
 
     let dlArgs = {
       timestamp: timestamp,
       format: format,
       gdrive: popupSettingsRef.current[1],
       outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
-      gdriveKeyPath: settingsRef.current.find(s => s.key === 'gdriveJSONKey').value,
+      gdriveKeyPath: settingsRef.current.find(s => s.key === (cloudMode ? 'gdriveKeyText' : 'gdriveJSONKey')).value,
       gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value,
       removeSubtext: settingsRef.current.find(s => s.key === 'removeSubtext').value,
       normalizeAudio: settingsRef.current.find(s => s.key === 'normalizeAudio').value,
       useShazam: settingsRef.current.find(s => s.key === 'useShazam').value,
-      cookiePath: settingsRef.current.find(s => s.key === 'cookiePath').value,
+      cookiePath: settingsRef.current.find(s => s.key === (cloudMode ? 'cookieText' : 'cookiePath')).value,
       maxDownloads: settingsRef.current.find(s => s.key === 'maxDownloads').value,
       generateSubs: settingsRef.current.find(s => s.key === 'generateSubs').value,
       m3u8Title: m3u8Title,
@@ -421,7 +426,6 @@ function App() {
         payload: {
           ...dlArgs,
           playlistURL: currentLink,
-          serverURL: serverURLRef.current
         }
       }).then((response) => {
         console.log('playlist download ended: ', response);
@@ -444,7 +448,6 @@ function App() {
           payload: {
             ...dlArgs,
             url: currentLink,
-            serverURL: serverURLRef.current
           }
         }).then((response) => {
           console.log('download response: ', response);
@@ -485,12 +488,13 @@ function App() {
     setOpenFiles(true);
 
     let setBg = local ? setFileBg1 : setFileBg2
+    const cloudMode = !serverURLRef.current.startsWith('http://localhost')
 
     try {
       axios.post(`${serverURLRef.current}/clear`, {
         type: local ? 'local-downloads' : 'gdrive-downloads',
         outputPath: settingsRef.current.find(s => s.key === 'outputPath').value,
-        gdriveKeyPath: settingsRef.current.find(s => s.key === 'gdriveJSONKey').value,
+        gdriveKeyPath: settingsRef.current.find(s => s.key === (cloudMode ? 'gdriveKeyText' : 'gdriveJSONKey')).value,
         gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value
       }).then((response) => {
         let color = 'red'

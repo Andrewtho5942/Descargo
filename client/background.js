@@ -4,88 +4,88 @@ const cloudServerURL = "https://descargo-tunnel.andrewtho5942.xyz";//"https://re
 let serverURL = `http://localhost:${SERVER_PORT}`
 let eventSource = null;
 
-const activeIconPath = './src/images/dl_icon_active.png'
-const iconPath = './src/images/dl.png'
-let activeIconShowing = false;
-browser.storage.local.set({ activeIconShowing: false });
+let iconModifier = '';
+browser.storage.local.set({ iconModifier: '' });
 
 
 let disconnected = true;
 browser.storage.local.set({ disconnect: true });
 
 
-// download with requests from popup
-browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
-    return new Promise((resolve, reject) => {
-        if (message.type === 'DOWNLOAD_VIDEO') {
-            console.log('got download video request from popup');
 
-            const { payload } = message;
-            console.log('payload: ', payload)
-            // Post to /download on the server
-            axios.post(`${payload.serverURL}/download`, {
-                ...payload
-            }, { responseType: 'blob' }).then(async (result) => {
-                console.log('received server response: ', result);
+async function handleVideoDownload(result) {
+    const blob = result.data;
+    if (blob.type === 'application/octet-stream') {
+        const blobUrl = URL.createObjectURL(blob);
+        console.log('blobURL: ' + blobUrl);
 
-                const blob = result.data;
-                if ((blob.type === 'video/mp4')) {
-                    const blobUrl = URL.createObjectURL(blob);
-                    console.log('blobURL: ' + blobUrl)
+        // extract the filename from the response
+        let fileName = 'untitled.mp4';
+        const contentDisposition = result.headers['content-disposition'];
+        if (contentDisposition) {
+            const matches = /filename="([^"]+)"/.exec(contentDisposition);
+            if (matches && matches[1]) {
+                fileName = matches[1];
+            }
+        }
 
-                    // extract the filename from the response
-                    let fileName = 'untitled.mp4';
-                    const contentDisposition = result.headers['content-disposition'];
-                    if (contentDisposition) {
-                        const matches = /filename="([^"]+)"/.exec(contentDisposition);
-                        if (matches && matches[1]) {
-                            fileName = matches[1];
-                        }
-                    }
-                    try {
-                        await browser.downloads.download({
-                            url: blobUrl,
-                            filename: fileName
-                        });
-                        resolve({ message: 'success' })
-                    } catch (error) {
-                        console.error('Failed to start download:', error);
-                        resolve({ message: 'failure' })
-                    }
-                } else if (blob.type === 'application/json') {
-                    const text = await blob.text();
-                    const json = JSON.parse(text);
-                    console.log('response json:');
-                    console.log(json);
-                    resolve({ message: json.message })
-                } else {
-                    console.log('ERR: unknown blob type: ' + blob.type);
-                    resolve({ message: 'success' });
-                }
-            }).catch((err) => {
+        try {
+            await browser.downloads.download({
+                url: blobUrl,
+                filename: fileName
+            });
+            return { message: 'success' };
+        } catch (error) {
+            console.error('Failed to start download:', error);
+            return { message: 'failure' };
+        }
+    } else if (blob.type === 'application/json') {
+        const text = await blob.text();
+        const json = JSON.parse(text);
+        console.log('response json:', json);
+        return { message: json.message };
+    } else {
+        console.log('ERR: unknown blob type: ' + blob.type);
+        return { message: 'success' };
+    }
+}
+
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+
+    if (message.type === 'DOWNLOAD_VIDEO') {
+        console.log('got download video request from popup --- TEST 2');
+
+        const { payload } = message;
+        console.log('payload:', payload);
+
+        axios.post(`${serverURL}/download`, payload, { responseType: 'blob' }).then(async (result) => {
+            console.log('received server response:', result);
+            const response = await handleVideoDownload(result);
+            sendResponse(response);
+        })
+            .catch((err) => {
                 console.error('Service worker DOWNLOAD_VIDEO error:', err);
-                resolve({ message: 'failure' });
+                sendResponse({ message: 'failure' });
             });
 
-        }
+        // Return true to indicate asynchronous response
+        return true;
+    } else if (message.type === 'DOWNLOAD_PLAYLIST') {
+        console.log('got download playlist request from popup');
 
-        if (message.type === 'DOWNLOAD_PLAYLIST') {
-            console.log('got download playlist request from popup');
-
-            const { payload } = message;
-            // Post to /playlist on the server
-            axios.post(`${payload.serverURL}/playlist`, {
-                ...payload
-            }, { responseType: 'blob' }).then(async (result) => {
-                console.log('playlist finished: ', result)
+        const { payload } = message;
+        axios
+            .post(`${serverURL}/playlist`, payload, { responseType: 'blob' })
+            .then(async (result) => {
+                console.log('playlist finished:', result);
                 const blob = result.data;
 
-                if ((blob.type === 'application/zip')) {
+                if (blob.type === 'application/zip') {
                     const blobUrl = URL.createObjectURL(blob);
-                    console.log('blobURL: ' + blobUrl)
+                    console.log('blobURL:', blobUrl);
 
                     // extract the filename from the response
-                    let fileName = 'untitled.mp4';
+                    let fileName = 'untitled.zip';
                     const contentDisposition = result.headers['content-disposition'];
                     if (contentDisposition) {
                         const matches = /filename="([^"]+)"/.exec(contentDisposition);
@@ -93,34 +93,92 @@ browser.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
                             fileName = matches[1];
                         }
                     }
+
                     try {
                         await browser.downloads.download({
                             url: blobUrl,
                             filename: fileName
                         });
+                        console.log('playlist downloaded successfully');
+                        sendResponse({ message: 'success' });
                     } catch (error) {
                         console.error('Failed to start download:', error);
+                        sendResponse({ message: 'failure' });
                     }
-                    resolve({ message: 'success' });
                 } else if (blob.type === 'application/json') {
                     const text = await blob.text();
                     const json = JSON.parse(text);
-                    console.log('response json:');
-                    console.log(json);
-                    resolve({ message: json.message })
+                    console.log('response json:', json);
+                    sendResponse({ message: json.message });
                 } else {
-                    console.log('ERR: unknown blob type: ' + blob.type);
-                    resolve({ message: 'failure' });
+                    console.log('ERR: unknown blob type:', blob.type);
+                    sendResponse({ message: 'failure' });
                 }
-            }).catch((err) => {
+            })
+            .catch((err) => {
                 console.error('Service worker DOWNLOAD_PLAYLIST error:', err);
-                resolve({ message: 'failure' });
+                sendResponse({ message: 'failure' });
             });
 
-        }
-    });
-});
+        // Return true to indicate asynchronous response
+        return true;
+    } else if (message.type === 'DOWNLOAD_VIDEO_INJECTED') {
+        const { currentLink } = message.payload;
 
+        // Fetch settings from local storage or any source
+        chrome.storage.local.get('settings', (result) => {
+            chrome.storage.local.get('popupSettings', (result2) => {
+
+                let settings = result.settings || defaultSettings;
+                let popupSettings = result2.popupSettings || [false, true, ''];
+                let timestamp = new Date().toISOString();
+                let cloudMode = settings.find(s => s.key === 'cloudMode').value;
+
+                console.log('timestamp:')
+                console.log(timestamp)
+
+                let dlArgs = {
+                    timestamp: timestamp,
+                    format: popupSettings[0] ? 'mp4' : 'm4a',
+                    gdrive: popupSettings[1],
+                    outputPath: settings.find(s => s.key === 'outputPath').value,
+                    gdriveKeyPath: settings.find(s => s.key === (cloudMode ? 'gdriveKeyText' : 'gdriveJSONKey')).value,
+                    gdriveFolderID: settings.find(s => s.key === 'gdriveFolderID').value,
+                    removeSubtext: settings.find(s => s.key === 'removeSubtext').value,
+                    normalizeAudio: settings.find(s => s.key === 'normalizeAudio').value,
+                    useShazam: settings.find(s => s.key === 'useShazam').value,
+                    cookiePath: settings.find(s => s.key === (cloudMode ? 'cookieText' : 'cookiePath')).value,
+                    maxDownloads: settings.find(s => s.key === 'maxDownloads').value,
+                    generateSubs: settings.find(s => s.key === 'generateSubs').value,
+                    m3u8Title: '',
+                    useAria2c: false
+                }
+
+                addToHistory(currentLink, 'fetching... ', 0, timestamp, 'in-progress', 'Downloading...');
+
+                // Make the axios request to the server
+                // Post to /download on the server
+                axios.post(`${serverURL}/download`, {
+                    ...dlArgs,
+                    url: currentLink
+                }, { responseType: 'blob' }).then(async (result) => {
+                    console.log('received server response: ', result);
+
+                    const response = await handleVideoDownload(result);
+                    sendResponse(response);
+                }).catch((err) => {
+                    console.error('Service worker DOWNLOAD_VIDEO error:', err);
+                    sendResponse({ message: 'failure' });
+                });
+            });
+        });
+
+        // Return true to indicate asynchronous response
+        return true;
+    } else {
+        return { message: 'failure' };
+    }
+});
 
 
 
@@ -211,14 +269,16 @@ function sendNotification(result, data, title, message) {
 
 
 // update popup icon
-function updateIcon(isActive) {
-    let localIconPath = isActive ? activeIconPath : iconPath;
-    browser.browserAction.setIcon({ path: localIconPath }).then(() => {
-        console.log('icon changed successfully to ' + localIconPath);
+function updateIcon(iconMod) {
+    console.log('iconMod:' + iconMod)
+    let iconPath = "./src/images/dl_icon" + iconMod + '.png';
+
+    browser.browserAction.setIcon({ path: iconPath }).then(() => {
+        console.log('icon changed successfully to ' + iconPath);
     }).catch((error) => {
         console.log('error changing icon: ' + error);
     });
-    activeIconShowing = isActive;
+    iconModifier = iconMod;
 }
 
 
@@ -257,10 +317,6 @@ function handleEventSourceError() {
                 return item;
             });
 
-            // set icon to default
-            browser.storage.local.set({ activeIconShowing: false });
-
-            activeIconShowing = false;
             browser.storage.local.set({ history: updatedHistory }).then(() => {
                 //console.log('set new history to storage.');
             });
@@ -335,11 +391,11 @@ function handleProgressUpdate(data) {
         //update the icon as needed
         if (newStatus !== 'in-progress') {
             if (!updatedHistory.some(i => i.status === 'in-progress')) {
-                browser.storage.local.set({ activeIconShowing: false });
+                browser.storage.local.set({ iconModifier: '' });
             }
 
-        } else if (!activeIconShowing) {
-            browser.storage.local.set({ activeIconShowing: true });
+        } else if (iconModifier !== '_active') {
+            browser.storage.local.set({ iconModifier: '_active' });
         }
     });
 
@@ -387,6 +443,7 @@ function createEventSource() {
                 console.log('reconnected to server')
             });
             disconnected = false;
+            browser.storage.local.set({ iconModifier: '' });
         }
 
 
@@ -406,6 +463,7 @@ function createEventSource() {
                 console.log('disconnected from server')
             });
             disconnected = true;
+            browser.storage.local.set({ iconModifier: '_disconnected' });
         }
 
         handleEventSourceError();
@@ -457,10 +515,9 @@ browser.storage.onChanged.addListener((changes, area) => {
             // Recreate the EventSource with the new serverURL
             createEventSource();
         }
-    } else if (area === 'local' && changes.activeIconShowing) {
-        console.log('activeIconShowing changed to ', changes.activeIconShowing.newValue);
-        activeIconShowing = changes.activeIconShowing.newValue;
-        updateIcon(activeIconShowing);
+    } else if (area === 'local' && changes.iconModifier) {
+        console.log('iconModifier changed to ', changes.iconModifier.newValue);
+        updateIcon(changes.iconModifier.newValue);
     }
 });
 
@@ -472,10 +529,10 @@ browser.storage.onChanged.addListener((changes, area) => {
 // ---- communication with the content script ------
 
 const defaultSettings = [
-    { key: "AHKPath", value: '' },
-    { key: "focusExplorerPath", value: '' },
     { key: "darkMode", value: true },
     { key: "cloudMode", value: false },
+    { key: "AHKPath", value: '' },
+    { key: "focusExplorerPath", value: '' },
 
     { key: "m3u8Notifs", value: true },
     { key: "mp4Notifs", value: false },
@@ -494,6 +551,8 @@ const defaultSettings = [
     { key: "gdriveJSONKey", value: '' },
     { key: "gdriveFolderID", value: '' },
     { key: "cookiePath", value: "" },
+    { key: "gdriveKeyText", value: "" },
+    { key: "cookieText", value: "" },
 
     { key: "submitHotkey", value: 'Enter' },
     { key: "formatHotkey", value: 'p' },
@@ -505,6 +564,7 @@ const defaultSettings = [
     { key: "autofillHotkey", value: 'f' },
     { key: "settingsHotkey", value: 's' },
 ]
+
 
 const addToHistory = (file, fileName, progress, timestamp, status, task) => {
     console.log('adding to history from content script...')
@@ -523,56 +583,3 @@ const addToHistory = (file, fileName, progress, timestamp, status, task) => {
     });
 }
 
-
-
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === 'downloadVideo') {
-        const { currentLink } = message.payload;
-
-        // Fetch settings from local storage or any source
-        chrome.storage.local.get('settings', (result) => {
-            chrome.storage.local.get('popupSettings', (result2) => {
-
-                let settings = result.settings || defaultSettings;
-                let popupSettings = result2.popupSettings || [false, true, ''];
-                let timestamp = Date.now();
-                console.log('timestamp:')
-                console.log(timestamp)
-
-                let dlArgs = {
-                    timestamp: timestamp,
-                    format: popupSettings[0] ? 'mp4' : 'm4a',
-                    gdrive: popupSettings[1],
-                    outputPath: settings.find(s => s.key === 'outputPath').value,
-                    gdriveKeyPath: settings.find(s => s.key === 'gdriveJSONKey').value,
-                    gdriveFolderID: settings.find(s => s.key === 'gdriveFolderID').value,
-                    removeSubtext: settings.find(s => s.key === 'removeSubtext').value,
-                    normalizeAudio: settings.find(s => s.key === 'normalizeAudio').value,
-                    useShazam: settings.find(s => s.key === 'useShazam').value,
-                    cookiePath: settings.find(s => s.key === 'cookiePath').value,
-                    maxDownloads: settings.find(s => s.key === 'maxDownloads').value,
-                    generateSubs: settings.find(s => s.key === 'generateSubs').value,
-                    m3u8Title: '',
-                    useAria2c: false
-                }
-
-                addToHistory(currentLink, 'fetching... ', 0, timestamp, 'in-progress', 'Downloading...');
-
-                // Make the axios request to the server
-                axios.post(`${serverURL}/download`, {
-                    ...dlArgs,
-                    url: currentLink,
-                }).then((response) => {
-                    console.log('Download finished:', response.data);
-                    sendResponse({ message: 'success' });
-                }).catch((error) => {
-                    console.error('Error starting download:', error.message);
-                    sendResponse({ message: 'failure', error: error.message });
-                });
-            });
-        });
-
-        // Return true to keep the message channel open for asynchronous response
-        return true;
-    }
-});

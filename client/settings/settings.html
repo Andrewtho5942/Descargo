@@ -12,19 +12,12 @@
 
 <body>
   <div style="height:140px;"></div>
+
+  <!-- General -->
   <div class="container dense">
     <span class="label">General</span>
-    <div class="grid-item large">
-      AHK Executable Path
-      <input type="text" placeholder="/path/to/your/AutoHotkey.exe" class="text-input" autocomplete="off"></input>
-    </div>
-    <div class="grid-item large">
-      focusExplorer.ahk Script Path
-      <input type="text" placeholder="/path/to/your/focusExplorer.ahk" class="text-input" autocomplete="off"></input>
-    </div>
     <div class="grid-item">
       Dark Theme
-      <!-- Change this to a sun/moon? -->
       <label class="switch">
         <input type="checkbox" class="switch-checkbox" />
         <span class="slider"></span>
@@ -37,8 +30,17 @@
         <span class="slider"></span>
       </label>
     </div>
+    <div class="grid-item large">
+      AHK Executable Path
+      <input type="text" placeholder="/path/to/your/AutoHotkey.exe" class="text-input" autocomplete="off"></input>
+    </div>
+    <div class="grid-item large">
+      focusExplorer.ahk Script Path
+      <input type="text" placeholder="/path/to/your/focusExplorer.ahk" class="text-input" autocomplete="off"></input>
+    </div>
   </div>
 
+  <!-- Notifications -->
   <div class="container dense">
     <span class="label">Notifications</span>
     <div class="grid-item">
@@ -78,6 +80,7 @@
     </div>
   </div>
 
+  <!-- Downloads -->
   <div class="container dense">
     <span class="label">Downloads</span>
     <div class="grid-item large">
@@ -98,14 +101,6 @@
         <span class="slider"></span>
       </label>
     </div>
-    <!-- <div class="grid-item large">
-      Playlist Link / Start Download
-      <form id="playlist-form">
-        <input type="text" placeholder="https://your-playlist.youtube.com" class="text-input" id="playlist-input"
-          autocomplete="off">
-        <div id="playlist-btn">Start</div>
-      </form>
-    </div> -->
     <div class="grid-item">
       Rename w/ Shazam
       <label class="switch">
@@ -133,6 +128,7 @@
     </div>
   </div>
 
+  <!-- Connections -->
   <div class="container">
     <span class="label">Connections</span>
     <div class="grid-item large">
@@ -147,8 +143,17 @@
       Browser Cookie Path
       <input type="text" placeholder="/path/to/cookies.txt" class="text-input" autocomplete="off"></input>
     </div>
+    <div class="grid-item large">
+      Google Drive JSON Text
+      <textarea placeholder="Copy & paste your JSON key" class="text-input" autocomplete="off"></textarea>
+    </div>
+    <div class="grid-item large">
+      Cookies File Text
+      <textarea placeholder="Copy & paste your cookies.txt" class="text-input" autocomplete="off"></textarea>
+    </div>
   </div>
 
+  <!-- Hotkeys -->
   <div class="container dense">
     <span class="label">Edit Hotkey Bindings</span>
     <div class="grid-item">
@@ -217,19 +222,18 @@
   </div>
 
   <div style="height:30px"></div>
-    
+
   <input type="checkbox" id="close-footer" style="display: none;">
   <div class="footer">
     Like the extension? Support it by <a href="https://buymeacoffee.com/andrewtho5942" target="_blank">buying me a
       coffee!</a>
-      <label for="close-footer" class="close-btn">X</label>
+    <label for="close-footer" class="close-btn">X</label>
   </div>
 
   <div class="header">
     <div class="header-text"><img src="dl.png" alt="dl-icon" class="header-icon" />Descargo Settings</div>
   </div>
 
-  <script src="./axios.min.js"></script>
   <script src="settings.js" type="module"></script>
 </body>
 

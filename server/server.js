@@ -2,7 +2,6 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const { exec, spawn } = require('child_process');
-const axios = require('axios');
 
 const os = require('os');
 const fs = require('fs-extra');
@@ -13,9 +12,6 @@ const { google } = require('googleapis');
 const path = require('path');
 const { Shazam } = require('node-shazam');
 const shazam = new Shazam();
-const util = require('util');
-
-const execAsync = util.promisify(exec);
 
 process.env.LANG = 'en_US.UTF-8';
 
@@ -250,8 +246,6 @@ function deleteFileIfExists(path) {
 }
 
 function createGdriveAuth(gdriveFolderID, keyPath) {
-  //const key = require('./keys/yt-dl-443015-d39da117fe4a.json');
-
   const auth = new google.auth.GoogleAuth({
     credentials: require(keyPath),
     scopes: ['https://www.googleapis.com/auth/drive.file'],
@@ -558,6 +552,7 @@ async function finishUpload(generateSubs, format, gdrive, resolve, filePath, new
 
     //move the file from temp to downloads OR generate the subtitles and write the mp4 with subititles to the permPath
     if (generateSubs && (format === 'mp4')) {
+      broadcastProgress({ progress: 0, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Transcribing...' })
       await generateSubtitles(filePath, permPath, url, timestamp, newFile.value);
       // upload the file with captions to google drive
       if (gdrive) {

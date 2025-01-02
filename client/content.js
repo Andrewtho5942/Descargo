@@ -1,6 +1,6 @@
 (function () {
     const injectButton = () => {
-        console.log('injecting button to yt page...');
+        console.log('injecting download button to yt page...');
 
         const menuContainer = document.querySelector('#top-row #owner');
         if (!menuContainer || document.querySelector('#custom-download-button')) return;
@@ -34,7 +34,7 @@
 
             // Send data to the service worker
             chrome.runtime.sendMessage({
-                action: 'downloadVideo',
+                type: 'DOWNLOAD_VIDEO_INJECTED',
                 payload: {
                     currentLink
                 }

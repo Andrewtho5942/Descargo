@@ -156,7 +156,7 @@ body {
 }
 
 .grid-item:hover {
-    box-shadow: 0 0 6px 3px rgba(40, 160, 60, 0.3);
+    box-shadow: 0 0 4px 2px rgba(40, 160, 60, 0.3);
 }
 
 .text-input {
@@ -167,7 +167,7 @@ body {
     border: none;
     outline: 2px solid var(--background-color);
     transition: background-color 0.3s ease, color 0.3s ease, outline 0.3s ease;
-
+    resize: vertical;
     padding: 4px 6px;
 }
 
