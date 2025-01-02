@@ -263,7 +263,7 @@ h1 {
 }
 
 .progress {
-  width:50px;
+  width: 50px;
   display: inline-block;
 }
 
@@ -314,13 +314,15 @@ h1 {
   transition: background-color 0.3s ease;
   border-radius: 5px;
 
-  cursor: pointer;
   color: rgb(40, 160, 60);
   display: flex;
   align-items: center;
   margin: 0px;
   padding: 0px 4px;
   user-select: none;
+}
+.file-ops.open-clear {
+  cursor:pointer;
 }
 
 .file-ops.clear {
@@ -340,14 +342,22 @@ h1 {
   width: 25px;
   height: 25px;
   margin: 0px 5px;
-  cursor: pointer;
   transition: opacity 0.3s ease;
-  opacity: 0.9;
   user-select: none;
 }
 
 .file-btn:hover {
   opacity: 1;
+}
+
+.file-btn.enabled {
+  opacity: 0.9;
+  cursor: pointer;
+}
+
+.file-btn.disabled {
+  opacity: 0.3;
+  pointer-events: none;
 }
 
 .file-btn-wrapper {
@@ -358,6 +368,7 @@ h1 {
   transition: background-color 0.3s ease;
   border-radius: 5px;
 }
+
 
 .autofill-btn {
   position: absolute;
@@ -516,7 +527,8 @@ h1 {
   color: rgb(40, 160, 60);
 }
 
-.link-content, .history-content {
+.link-content,
+.history-content {
   color: var(--text-color-mute);
 }
 

@@ -29,6 +29,7 @@ const defaultSettings = [
   { key: "outputPath", value: '' },
   { key: "removeSubtext", value: true },
   { key: "normalizeAudio", value: false },
+  { key: "compressFiles", value: false },
   { key: "useShazam", value: false },
   { key: "generateSubs", value: false },
   { key: "useAria2c", value: false },
@@ -97,6 +98,21 @@ function App() {
     });
   }
 
+  function calculateResultIcon(latestDownload) {
+    let ldTimestamp = Date.parse(latestDownload.timestamp)
+    let stalenessSec = (Date.now() - ldTimestamp) / 1000000
+    console.log('stalenessSec: ' + stalenessSec);
+
+    // set result according to staleness and status of the latest download in the history
+    if (stalenessSec > 600) {
+      setResult('');
+    } else {
+      if (latestDownload.status === 'completed') setResult('success')
+      else if (latestDownload.status === 'in-progress') setResult('loading')
+      else if (latestDownload.status === 'error') setResult('failure')
+      else setResult('')
+    }
+  }
 
   // reload m3u8 links, history, and disconnect from storage when loading the popup
   useEffect(() => {
@@ -116,6 +132,9 @@ function App() {
       console.log('retrieved history:')
       console.log(history);
       setHistory(history);
+      if (history.length >= 1) {
+        calculateResultIcon(history[0]);
+      }
     }).catch((error) => {
       console.error('Error retrieving history:', error);
     });
@@ -191,6 +210,9 @@ function App() {
           //console.log('retrieved history:')
           //console.log(history);
           setHistory(history);
+          if (history.length >= 1) {
+            calculateResultIcon(history[0]);
+          }
         }).catch((error) => {
           console.error('Error retrieving history:', error);
         });
@@ -407,6 +429,7 @@ function App() {
       gdriveFolderID: settingsRef.current.find(s => s.key === 'gdriveFolderID').value,
       removeSubtext: settingsRef.current.find(s => s.key === 'removeSubtext').value,
       normalizeAudio: settingsRef.current.find(s => s.key === 'normalizeAudio').value,
+      compressFiles: settingsRef.current.find(s => s.key === 'compressFiles').value,
       useShazam: settingsRef.current.find(s => s.key === 'useShazam').value,
       cookiePath: settingsRef.current.find(s => s.key === (cloudMode ? 'cookieText' : 'cookiePath')).value,
       maxDownloads: settingsRef.current.find(s => s.key === 'maxDownloads').value,
@@ -547,6 +570,7 @@ function App() {
 
       // clear the history storage
       browser.storage.local.remove('history')
+      setResult('')
 
       try {
         axios.post(`${serverURLRef.current}/kill_processes`, {
@@ -654,7 +678,7 @@ function App() {
 
 
       <div className="bot-spanner">
-        <div className={`file-ops ${openFiles ? 'open' : 'clear'}`} onClick={() => { setOpenFiles(!openFiles) }}><div className={`clear-open-toggle`}>{openFiles ? 'OPEN' : 'CLEAR'}</div></div>
+        <div className={`file-ops open-clear ${openFiles ? 'open' : 'clear'}`} onClick={() => { setOpenFiles(!openFiles) }}><div className={`clear-open-toggle`}>{openFiles ? 'OPEN' : 'CLEAR'}</div></div>
         <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
         <div className={`menu-btn ${menubtnbg[0] ? 'active' : 'inactive'}`} onClick={() => { openFiles ? openMenu(true) : clearMenu(true) }}><div className={`menu-toggle m3u8 ${m3u8Open ? 'active' : 'inactive'}`}>V</div>GET</div>
         <div style={{ width: '2px', height: '100%', backgroundColor: 'black' }}></div>
@@ -663,10 +687,10 @@ function App() {
 
         <div className='file-ops'>
           <div className='file-btn-wrapper' style={{ '--bg-color': fileBg1 }}>
-            <img src={explorer} onClick={() => { openFiles ? openFolder(true) : clearFolder(true) }} alt="explorer" className="file-btn" draggable="false"></img>
+            <img src={explorer} onClick={() => { openFiles ? openFolder(true) : clearFolder(true) }} alt="explorer" className={`file-btn ${serverURLRef.current.startsWith('http://localhost') ? 'enabled' : 'disabled'}`} draggable="false"></img>
           </div>
-          <div className='file-btn-wrapper' style={{ '--bg-color': fileBg2 }}>
-            <img src={drive} onClick={() => { openFiles ? openFolder(false) : clearFolder(false) }} alt="drive" className="file-btn" draggable="false"></img>
+          <div className='file-btn-wrapper enabled' style={{ '--bg-color': fileBg2 }}>
+            <img src={drive} onClick={() => { openFiles ? openFolder(false) : clearFolder(false) }} alt="drive" className="file-btn enabled" draggable="false"></img>
           </div>
         </div>
       </div>

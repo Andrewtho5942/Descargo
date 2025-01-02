@@ -93,6 +93,15 @@ body {
     border-radius: 10px;
 }
 
+.disclaimer {
+    color: var(--text-color);
+    text-align: center;
+    font-size: large;
+    max-width: 780px;
+    width: calc(100% - 40px);
+    margin:auto;
+}
+
 .container {
     transition: background-color 0.3s ease, color 0.3s ease;
     position: relative;
@@ -117,7 +126,7 @@ body {
 
 .container .label {
     position: absolute;
-    top: -32px;
+    top: -34px;
     left: 40px;
     font-size: x-large;
     font-weight: bold;
