@@ -17,7 +17,7 @@ import cloudIcon from './images/cloud.png'
 const defaultSettings = [
   { key: "darkMode", value: true },
   { key: "cloudMode", value: false },
-  { key: "highlightColor", value: 'green' },
+  { key: "highlightColor", value: '' },
   { key: "AHKPath", value: '' },
   { key: "focusExplorerPath", value: '' },
 

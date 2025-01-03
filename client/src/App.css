@@ -71,9 +71,9 @@
   --checkbox-highlight: rgb(45, 55, 255);
 }
 [data-highlight='blue'][data-theme='dark'] {
-  --download-btn-bg: rgb(30, 35, 135);
-  --download-btn-bg-active: rgb(35, 40, 145);
-  --link-shadow: rgba(0, 0, 220, 0.4);
+  --download-btn-bg: rgb(25, 30, 125);
+  --download-btn-bg-active: rgb(30, 35, 135);
+  --link-shadow: rgba(20, 20, 240, 0.4);
   --toggle-hover: rgb(30, 30, 60);
 }
 [data-highlight='blue'][data-theme='light'] {
@@ -84,35 +84,35 @@
 }
 
 [data-highlight='orange'] {
-  --bright-highlight: rgb(170, 105, 45);
+  --bright-highlight: rgb(190, 125, 35);
   --checkbox-highlight: rgb(150, 86, 29);
 }
 [data-highlight='orange'][data-theme='dark'] {
-  --download-btn-bg: rgb(79, 46, 8);
-  --download-btn-bg-active: rgb(90, 59, 13);
+  --download-btn-bg: rgb(95, 60, 22);
+  --download-btn-bg-active: rgb(100, 69, 23);
   --link-shadow: rgba(160, 112, 40, 0.4);
-  --toggle-hover: rgb(50, 50, 40);
+  --toggle-hover: rgb(50, 45, 40);
 }
 [data-highlight='orange'][data-theme='light'] {
   --download-btn-bg: rgb(210, 175, 125);
   --download-btn-bg-active: rgb(215, 161, 105);
   --link-shadow: rgba(205, 155, 80, 0.6);
-  --toggle-hover: rgb(230, 230, 215);
+  --toggle-hover: rgb(235, 225, 215);
 }
 
 [data-highlight='purple'] {
-  --bright-highlight: rgb(100, 60, 255);
-  --checkbox-highlight: rgb(85, 29, 180);
+  --bright-highlight: rgb(105, 60, 255);
+  --checkbox-highlight: rgb(95, 35, 190);
 }
 [data-highlight='purple'][data-theme='dark'] {
-  --download-btn-bg: rgb(45, 15, 140);
-  --download-btn-bg-active: rgb(52, 18, 155);
+  --download-btn-bg: rgb(52, 15, 135);
+  --download-btn-bg-active: rgb(57, 18, 150);
   --link-shadow: rgba(55, 25, 255, 0.4);
   --toggle-hover: rgb(42, 38, 50);
 }
 [data-highlight='purple'][data-theme='light'] {
-  --download-btn-bg: rgb(171, 145, 250);
-  --download-btn-bg-active: rgb(180, 150, 255);
+  --download-btn-bg: rgb(181, 155, 255);
+  --download-btn-bg-active: rgb(190, 160, 255);
   --link-shadow: rgba(126, 80, 205, 0.6);
   --toggle-hover: rgb(225, 215, 255);
 }

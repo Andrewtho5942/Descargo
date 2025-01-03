@@ -6,7 +6,7 @@
 let settings = [
   { key: "darkMode", value: true },
   { key: "cloudMode", value: false },
-  { key: "highlightColor", value: 'green' },
+  { key: "highlightColor", value: '' },
   { key: "AHKPath", value: 'C:\\Program Files\\AutoHotkey\\v2\\AutoHotkey.exe' },
   { key: "focusExplorerPath", value: 'C:\\Users\\andre\\focusExplorer.ahk' },
 
@@ -70,6 +70,13 @@ function setInputValues() {
       //console.log('loading from storage:')
       //console.log(settings[i].value)
       input.value = settings[i].value;
+
+      // initialize the theme based on the state of the highlightColor textbox
+      if (settings[i].key === 'highlightColor') {
+        let highlightColor = settings[i].value;
+        console.log('highlightColor: ' + highlightColor);
+        document.documentElement.setAttribute('data-highlight', ['orange', 'purple', 'blue'].includes(highlightColor) ? highlightColor : 'green')
+      }
     }
 
     // update the visibility of settings depending on the cloudMode value
@@ -262,11 +269,33 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
           settings[i].value = newValue;
         }
-
+        if (settings[i].key === 'highlightColor') {
+          // initialize the theme based on the state of the highlightColor textbox
+          let highlightColor = settings[i].value;
+          document.documentElement.setAttribute('data-highlight', ['orange', 'purple', 'blue'].includes(highlightColor) ? highlightColor : 'green')
+        }
         storage.set({ ['settings']: settings });
         console.log(`Saved new value for ` + settings[i].key + `: ${newValue}`);
       });
     }
+  }
+
+
+
+  // add onclick listeners for the highlight choices
+  let highlightChoices = document.getElementsByClassName('highlight-choice');
+  let highlightInput = document.getElementById('highlight-input');
+
+
+  for (let choiceNum = 0; choiceNum < highlightChoices.length; choiceNum++) {
+    let choice = highlightChoices[choiceNum];
+    choice.addEventListener('click', () => {
+      // when the element is clicked, set the text in the choice to the input
+      highlightInput.value = choice.innerHTML;
+
+      // dispatch a new input event to trigger the listener
+      highlightInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
   }
 });
 

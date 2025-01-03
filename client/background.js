@@ -549,7 +549,7 @@ browser.storage.onChanged.addListener((changes, area) => {
 const defaultSettings = [
     { key: "darkMode", value: true },
     { key: "cloudMode", value: false },
-    { key: "highlightColor", value: 'green' },
+    { key: "highlightColor", value: '' },
     { key: "AHKPath", value: '' },
     { key: "focusExplorerPath", value: '' },
 
