@@ -353,6 +353,8 @@ async function uploadFile(filePath, fileName, drive, gdriveFolderID, playlistNam
 
 // endpoint to connect to client and send data back to it
 app.get('/progress', (req, res) => {
+  console.log('Received new progress connection');
+  
   // set headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -543,7 +545,7 @@ const getTitlewShazam = (tempFile, url, cookiePath, newFile, removeSubtext, form
 const extractAudio = (videoFile, outputAudioFile) => {
   return new Promise((resolve, reject) => {
     console.log(`Extracting audio from ${videoFile}...`);
-    const command = `ffmpeg -i "${videoFile}" -vn -acodec aac -b:a 192k "${outputAudioFile}"`;
+    const command = `ffmpeg -i "${videoFile}" -vn -acodec aac -b:a 128k "${outputAudioFile}"`;
 
     exec(command, (error, stdout, stderr) => {
       if (error) {

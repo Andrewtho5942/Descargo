@@ -45,28 +45,24 @@ async function handleVideoDownload(result) {
         console.log('response json:', json);
         return { message: json.message };
     } else {
-        console.log('ERR: unknown blob type: ' + blob.type);
-        return { message: 'success' };
+        console.error('ERR: unknown blob type: ' + blob.type);
+        return { message: 'failure' };
     }
 }
 
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     if (message.type === 'DOWNLOAD_VIDEO') {
-        console.log('got download video request from popup --- TEST 2');
-
         const { payload } = message;
         console.log('payload:', payload);
 
-        axios.post(`${serverURL}/download`, payload, { responseType: 'blob' }).then(async (result) => {
-            console.log('received server response:', result);
-            const response = await handleVideoDownload(result);
-            sendResponse(response);
-        })
-            .catch((err) => {
-                console.error('Service worker DOWNLOAD_VIDEO error:', err);
-                sendResponse({ message: 'failure' });
-            });
+        axios.post(`${serverURL}/download`, payload).then(async (result) => {
+            console.log('received server download response: ', result);
+            sendResponse({ message: 'loading' })
+        }).catch((err) => {
+            console.error('Service worker DOWNLOAD_VIDEO error:', err);
+            sendResponse({ message: 'failure' });
+        });
 
         // Return true to indicate asynchronous response
         return true;
@@ -74,51 +70,49 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.log('got download playlist request from popup');
 
         const { payload } = message;
-        axios
-            .post(`${serverURL}/playlist`, payload, { responseType: 'blob' })
-            .then(async (result) => {
-                console.log('playlist finished:', result);
-                const blob = result.data;
+        axios.post(`${serverURL}/playlist`, payload).then(async (result) => {
+            console.log('playlist finished:', result);
+            // const blob = result.data;
+            sendResponse({ message: 'loading' });
 
-                if (blob.type === 'application/zip') {
-                    const blobUrl = URL.createObjectURL(blob);
-                    console.log('blobURL:', blobUrl);
+            //     if (blob.type === 'application/zip') {
+            //         const blobUrl = URL.createObjectURL(blob);
+            //         console.log('blobURL:', blobUrl);
 
-                    // extract the filename from the response
-                    let fileName = 'untitled.zip';
-                    const contentDisposition = result.headers['content-disposition'];
-                    if (contentDisposition) {
-                        const matches = /filename="([^"]+)"/.exec(contentDisposition);
-                        if (matches && matches[1]) {
-                            fileName = matches[1];
-                        }
-                    }
+            //         // extract the filename from the response
+            //         let fileName = 'untitled.zip';
+            //         const contentDisposition = result.headers['content-disposition'];
+            //         if (contentDisposition) {
+            //             const matches = /filename="([^"]+)"/.exec(contentDisposition);
+            //             if (matches && matches[1]) {
+            //                 fileName = matches[1];
+            //             }
+            //         }
 
-                    try {
-                        await browser.downloads.download({
-                            url: blobUrl,
-                            filename: fileName
-                        });
-                        console.log('playlist downloaded successfully');
-                        sendResponse({ message: 'success' });
-                    } catch (error) {
-                        console.error('Failed to start download:', error);
-                        sendResponse({ message: 'failure' });
-                    }
-                } else if (blob.type === 'application/json') {
-                    const text = await blob.text();
-                    const json = JSON.parse(text);
-                    console.log('response json:', json);
-                    sendResponse({ message: json.message });
-                } else {
-                    console.log('ERR: unknown blob type:', blob.type);
-                    sendResponse({ message: 'failure' });
-                }
-            })
-            .catch((err) => {
-                console.error('Service worker DOWNLOAD_PLAYLIST error:', err);
-                sendResponse({ message: 'failure' });
-            });
+            //         try {
+            //             await browser.downloads.download({
+            //                 url: blobUrl,
+            //                 filename: fileName
+            //             });
+            //             console.log('playlist downloaded successfully');
+            //             sendResponse({ message: 'success' });
+            //         } catch (error) {
+            //             console.error('Failed to start download:', error);
+            //             sendResponse({ message: 'failure' });
+            //         }
+            //     } else if (blob.type === 'application/json') {
+            //         const text = await blob.text();
+            //         const json = JSON.parse(text);
+            //         console.log('response json:', json);
+            //         sendResponse({ message: json.message });
+            //     } else {
+            //         console.log('ERR: unknown blob type:', blob.type);
+            //         sendResponse({ message: 'failure' });
+            //     }
+        }).catch((err) => {
+            console.error('Service worker DOWNLOAD_PLAYLIST error:', err);
+            sendResponse({ message: 'failure' });
+        });
 
         // Return true to indicate asynchronous response
         return true;
@@ -162,13 +156,13 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 axios.post(`${serverURL}/download`, {
                     ...dlArgs,
                     url: currentLink
-                }, { responseType: 'blob' }).then(async (result) => {
+                }).then(async (result) => {
                     console.log('received server response: ', result);
 
-                    const response = await handleVideoDownload(result);
-                    sendResponse(response);
+                    //const response = await handleVideoDownload(result);
+                    sendResponse({ message: 'in-progress' });
                 }).catch((err) => {
-                    console.error('Service worker DOWNLOAD_VIDEO error:', err);
+                    console.error('Service worker DOWNLOAD_VIDEO_INJECTED error:', err);
                     sendResponse({ message: 'failure' });
                 });
             });
@@ -271,7 +265,7 @@ function sendNotification(result, data, title, message) {
 
 // update popup icon
 function updateIcon(iconMod) {
-    console.log('iconMod:' + iconMod)
+    // console.log('iconMod:' + iconMod)
     let iconPath = "./src/images/dl_icon" + iconMod + '.png';
 
     browser.browserAction.setIcon({ path: iconPath }).then(() => {
@@ -336,10 +330,33 @@ function handleProgressUpdate(data) {
 
     if ((data.progress === 100) && (data.status === 'completed')) {
         console.log('DEBUG -_-_-_-_ RECEIVED COMPLETION BROADCAST: ' + data.fileName);
-        browser.storage.local.get('settings').then((result) => {
-            sendNotification(result, data, '✓ Descargo Finished', `Finished Downloading ${truncateString(data.fileName, 30)}  |  time: ${data.timeSpent}`);
-        });
-        newStatus = 'completed';
+
+        if (!serverURL.startsWith('http://localhost')) {
+            // we are in cloud mode
+            if (data.task === 'download-completed') {
+                // only the download completed, so request the data stream from the server
+                axios.post(`${serverURL}/streamVideo`, data, { responseType: 'blob' }).then(async (result) => {
+                    console.log('received server streaming response: ', result);
+                    await handleVideoDownload(result);
+                }).catch((err) => {
+                    console.error('Service worker stream video error:', err);
+                });
+                newStatus = 'in-progress'
+
+            } else if (data.task === 'streaming-completed') {
+                // the streaming is completed, send the notification if needed and set the status to completed
+                browser.storage.local.get('settings').then((result) => {
+                    sendNotification(result, data, '✓ Descargo Finished', `Finished Downloading ${truncateString(data.fileName, 30)}  |  time: ${data.timeSpent}`);
+                });
+                newStatus = 'completed';
+            }
+        } else {
+            // not in cloud mode
+            browser.storage.local.get('settings').then((result) => {
+                sendNotification(result, data, '✓ Descargo Finished', `Finished Downloading ${truncateString(data.fileName, 30)}  |  time: ${data.timeSpent}`);
+            });
+            newStatus = 'completed';
+        }
     }
 
     if (data.status === 'error') {
@@ -532,6 +549,7 @@ browser.storage.onChanged.addListener((changes, area) => {
 const defaultSettings = [
     { key: "darkMode", value: true },
     { key: "cloudMode", value: false },
+    { key: "highlightColor", value: 'green' },
     { key: "AHKPath", value: '' },
     { key: "focusExplorerPath", value: '' },
 

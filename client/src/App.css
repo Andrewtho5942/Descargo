@@ -1,4 +1,4 @@
-:root {
+:root[data-theme='dark'] {
   /* Dark Theme */
   --background-color: rgb(22, 23, 26);
   --background-color-table: rgb(17, 18, 21);
@@ -7,12 +7,10 @@
   /*--header-bg: rgb(43, 47, 49);*/
 
   --link-bg: rgb(35, 38, 40);
-  --download-btn-bg: rgb(8, 79, 40);
-  --download-btn-bg-active: rgb(13, 90, 45);
+
 
   --toggle-bg: rgb(40, 40, 40);
   --toggle-clear: rgb(60, 40, 40);
-  --toggle-hover: rgb(40, 50, 40);
   --toggle-hover-clear: rgb(70, 40, 40);
 
   --m3u8-hover: rgb(25, 30, 25);
@@ -22,7 +20,6 @@
   --text-color: white;
   --text-color-mute: rgb(180, 180, 180);
 
-  --link-shadow: rgba(40, 160, 60, 0.4);
   --checkbox-border: rgb(30, 30, 30);
   --checkbox-bg: rgb(50, 52, 55);
 
@@ -34,12 +31,10 @@
   --background-color-table: rgb(255, 255, 255);
   --header-bg: rgb(223, 227, 229);
   --link-bg: rgb(215, 218, 220);
-  --download-btn-bg: rgb(120, 205, 120);
-  --download-btn-bg-active: rgb(100, 205, 100);
+
 
   --toggle-bg: rgb(215, 215, 220);
   --toggle-clear: rgb(230, 215, 215);
-  --toggle-hover: rgb(215, 230, 215);
   --toggle-hover-clear: rgb(240, 215, 215);
 
   --m3u8-hover: rgb(195, 200, 195);
@@ -49,12 +44,78 @@
   --text-color: black;
   --text-color-mute: rgb(75, 75, 75);
 
-  --link-shadow: rgba(80, 205, 80, 0.6);
-
   --checkbox-border: rgb(230, 230, 230);
   --checkbox-bg: white;
 }
 
+[data-highlight='green'] {
+  --bright-highlight: rgb(40, 160, 60);
+  --checkbox-highlight: rgb(19, 134, 21); 
+}
+[data-highlight='green'][data-theme='dark'] {
+  --download-btn-bg: rgb(8, 79, 40);
+  --download-btn-bg-active: rgb(13, 90, 45);
+  --link-shadow: rgba(40, 160, 60, 0.4); 
+  --toggle-hover: rgb(40, 50, 40);
+
+}
+[data-highlight='green'][data-theme='light'] {
+  --download-btn-bg: rgb(130, 225, 130);
+  --download-btn-bg-active: rgb(135, 235, 136);
+  --link-shadow: rgba(80, 205, 80, 0.6);
+  --toggle-hover: rgb(215, 230, 215);
+}
+
+[data-highlight='blue'] {
+  --bright-highlight: rgb(55, 75, 255);
+  --checkbox-highlight: rgb(45, 55, 255);
+}
+[data-highlight='blue'][data-theme='dark'] {
+  --download-btn-bg: rgb(30, 35, 135);
+  --download-btn-bg-active: rgb(35, 40, 145);
+  --link-shadow: rgba(0, 0, 220, 0.4);
+  --toggle-hover: rgb(30, 30, 60);
+}
+[data-highlight='blue'][data-theme='light'] {
+  --download-btn-bg: rgb(160, 166, 255);
+  --download-btn-bg-active: rgb(145, 150, 255);
+  --link-shadow: rgba(80, 101, 205, 0.6);
+  --toggle-hover: rgb(215, 215, 240);
+}
+
+[data-highlight='orange'] {
+  --bright-highlight: rgb(170, 105, 45);
+  --checkbox-highlight: rgb(150, 86, 29);
+}
+[data-highlight='orange'][data-theme='dark'] {
+  --download-btn-bg: rgb(79, 46, 8);
+  --download-btn-bg-active: rgb(90, 59, 13);
+  --link-shadow: rgba(160, 112, 40, 0.4);
+  --toggle-hover: rgb(50, 50, 40);
+}
+[data-highlight='orange'][data-theme='light'] {
+  --download-btn-bg: rgb(210, 175, 125);
+  --download-btn-bg-active: rgb(215, 161, 105);
+  --link-shadow: rgba(205, 155, 80, 0.6);
+  --toggle-hover: rgb(230, 230, 215);
+}
+
+[data-highlight='purple'] {
+  --bright-highlight: rgb(100, 60, 255);
+  --checkbox-highlight: rgb(85, 29, 180);
+}
+[data-highlight='purple'][data-theme='dark'] {
+  --download-btn-bg: rgb(45, 15, 140);
+  --download-btn-bg-active: rgb(52, 18, 155);
+  --link-shadow: rgba(55, 25, 255, 0.4);
+  --toggle-hover: rgb(42, 38, 50);
+}
+[data-highlight='purple'][data-theme='light'] {
+  --download-btn-bg: rgb(171, 145, 250);
+  --download-btn-bg-active: rgb(180, 150, 255);
+  --link-shadow: rgba(126, 80, 205, 0.6);
+  --toggle-hover: rgb(225, 215, 255);
+}
 
 .App {
   display: flex;
@@ -83,7 +144,7 @@ html {
 }
 
 h1 {
-  color: rgb(40, 160, 60);
+  color: var(--bright-highlight);
   margin-top: 2px;
   margin-bottom: 5px;
   padding-left: 120px;
@@ -251,7 +312,7 @@ h1 {
 }
 
 .menu-btn {
-  color: rgb(40, 160, 60);
+  color: var(--bright-highlight);
   font-size: large;
   padding: 0px 8px;
   height: 100%;
@@ -268,7 +329,7 @@ h1 {
 }
 
 .menu-btn.active {
-  background-color: green;
+  background-color: var(--checkbox-highlight);
 }
 
 .menu-toggle {
@@ -314,15 +375,16 @@ h1 {
   transition: background-color 0.3s ease;
   border-radius: 5px;
 
-  color: rgb(40, 160, 60);
+  color: var(--bright-highlight);
   display: flex;
   align-items: center;
   margin: 0px;
   padding: 0px 4px;
   user-select: none;
 }
+
 .file-ops.open-clear {
-  cursor:pointer;
+  cursor: pointer;
 }
 
 .file-ops.clear {
@@ -375,7 +437,7 @@ h1 {
   cursor: pointer;
   top: 68px;
   left: 321px;
-  color: rgb(40, 160, 60);
+  color: var(--bright-highlight);
   /*font-weight: bold;*/
   font-size: large;
   padding: 5px 8px;
@@ -465,7 +527,7 @@ h1 {
 }
 
 .m3u8-dl.active {
-  background-color: green;
+  background-color: var(--checkbox-highlight);
 }
 
 .m3u8-dl.inactive {
@@ -524,7 +586,7 @@ h1 {
 }
 
 .timestamp-content {
-  color: rgb(40, 160, 60);
+  color: var(--bright-highlight);
 }
 
 .link-content,
@@ -560,9 +622,9 @@ h1 {
 }
 
 .checkbox-container input[type="checkbox"]:checked+.custom-checkbox {
-  background-color: #138615;
+  background-color: var(--checkbox-highlight);
   /* Active color */
-  border-color: #138615;
+  border-color: var(--checkbox-highlight);
   border-radius: 3px;
 }
 

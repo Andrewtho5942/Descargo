@@ -17,6 +17,7 @@ import cloudIcon from './images/cloud.png'
 const defaultSettings = [
   { key: "darkMode", value: true },
   { key: "cloudMode", value: false },
+  { key: "highlightColor", value: 'green' },
   { key: "AHKPath", value: '' },
   { key: "focusExplorerPath", value: '' },
 
@@ -100,7 +101,7 @@ function App() {
 
   function calculateResultIcon(latestDownload) {
     let ldTimestamp = Date.parse(latestDownload.timestamp)
-    let stalenessSec = (Date.now() - ldTimestamp) / 1000000
+    let stalenessSec = (Date.now() - ldTimestamp) / 1000
     console.log('stalenessSec: ' + stalenessSec);
 
     // set result according to staleness and status of the latest download in the history
@@ -182,9 +183,15 @@ function App() {
       setSettings(newSettings);
 
       // set the dark or light mode
-      const darkMode = newSettings.find(s => s.key === 'darkMode')
-      console.log('darkmode: ' + darkMode.value)
-      document.documentElement.setAttribute('data-theme', darkMode.value ? 'dark' : 'light');
+      const darkMode = newSettings.find(s => s.key === 'darkMode').value
+      console.log('darkmode: ' + darkMode)
+      document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
+
+      const highlightColor = newSettings.find(s => s.key === 'highlightColor').value
+      console.log('highlightColor: ' + highlightColor);
+
+      // set the highlight color for the CSS, and if it isnt one of the options, default to green color
+      document.documentElement.setAttribute('data-highlight', ['orange', 'purple', 'blue'].includes(highlightColor) ? highlightColor : 'green');
 
     }).catch((error) => {
       console.error('Error retrieving settings:', error);
@@ -522,12 +529,24 @@ function App() {
       }).then((response) => {
         let color = 'red'
         if (response.data.message === 'success') {
-          let darkMode = settingsRef.current.find(s => s.key === 'darkMode').value
-          if (darkMode) {
-            color = '#126d32';
+          let darkMode = settingsRef.current.find(s => s.key === 'darkMode').value;
+          let highlightColor = settingsRef.current.find(s => s.key === 'highlightColor').value;
+          if (highlightColor === 'blue') {
+            if (darkMode) color = '#232891';
+            else color = '#9196ff';
+          } else if (highlightColor === 'orange') {
+            if (darkMode) color = '#5a3b0d';
+            else color = '#d7a169';
+          } else if (highlightColor === 'purple') {
+            if (darkMode) color = '#34129b';
+            else color = '#b496ff';
           } else {
-            color = '#a0eba0';
+            if (darkMode) color = '#0d5a2d';
+            else color = '#87eb87';
           }
+
+
+
         }
         // update the background color
         setBg(color);

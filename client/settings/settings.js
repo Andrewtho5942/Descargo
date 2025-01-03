@@ -6,6 +6,7 @@
 let settings = [
   { key: "darkMode", value: true },
   { key: "cloudMode", value: false },
+  { key: "highlightColor", value: 'green' },
   { key: "AHKPath", value: 'C:\\Program Files\\AutoHotkey\\v2\\AutoHotkey.exe' },
   { key: "focusExplorerPath", value: 'C:\\Users\\andre\\focusExplorer.ahk' },
 

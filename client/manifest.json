@@ -36,7 +36,7 @@
     "options_page": "settings/settings.html",
     "content_scripts": [
     {
-      "matches": ["https://www.youtube.com/watch*"],
+      "matches": ["https://www.youtube.com/*"],
       "js": ["content.js"]
     }
   ]
