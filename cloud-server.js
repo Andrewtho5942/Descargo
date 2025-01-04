@@ -53,8 +53,13 @@ let clients = [];
 
 // send a message to every client
 function broadcastProgress(message) {
-  clients.forEach(client => client.write(`data: ${JSON.stringify(message)}\n\n`));
+  clients.forEach(client => {
+    if (client.deviceID == message.deviceID) {
+      client.address.write(`data: ${JSON.stringify(message)}\n\n`)
+    }
+  });
 }
+
 
 
 app.get('/', (req, res) => {
@@ -73,6 +78,10 @@ app.get('/progress', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
 
+  let curDeviceID = req.query.deviceID;
+  console.log('Received new progress connection with deviceID: ' + curDeviceID);
+
+
   // Force chunked encoding / flush
   if (res.flushHeaders) {
     res.flushHeaders();
@@ -86,11 +95,11 @@ app.get('/progress', (req, res) => {
     res.flush();
   }
 
-  clients.push(res);
+  clients.push({ address: res, deviceID: curDeviceID });
 
 
   // send messages on interval to not close the SSE connection
- const keepAlive = setInterval(() => {
+  const keepAlive = setInterval(() => {
     res.write(': keep-alive\n\n');
   }, 15000);
 
@@ -98,7 +107,7 @@ app.get('/progress', (req, res) => {
   // remove the client when the connection is closed
   req.on('close', () => {
     clearInterval(keepAlive);
-    clients = clients.filter(client => client !== res);
+    clients = clients.filter(client => client.deviceID !== curDeviceID);
   });
 });
 
@@ -117,89 +126,97 @@ function formatTime(seconds) {
 
 
 function readJsonFromFile(filePath) {
-  return new Promise((resolve, reject) => {
-    fs.readFile(filePath, 'utf8', (err, data) => {
-      if (err) {
-        console.error('Error reading the file:', err);
-        reject(err);
-        return;
-      }
+  try {
+    return new Promise((resolve, reject) => {
+      fs.readFile(filePath, 'utf8', (err, data) => {
+        if (err) {
+          console.error('Error reading the file:', err);
+          reject(err);
+          return;
+        }
 
-      try {
-        const jsonData = JSON.parse(data);
-        resolve(jsonData);
-      } catch (parseError) {
-        console.error('Error parsing JSON:', parseError);
-        reject(parseError);
-      }
+        try {
+          const jsonData = JSON.parse(data);
+          resolve(jsonData);
+        } catch (parseError) {
+          console.error('Error parsing JSON:', parseError);
+          reject(parseError);
+        }
+      });
     });
-  });
+  } catch (e) {
+    console.log('ERROR in readJsonFromFile: ', e);
+  }
 }
 
 
 
 
 
-function transcribeWithWhisper(videoPath, jsonPath, file, timestamp, fileName, totalDuration) {
-  return new Promise(async (resolve, reject) => {
+function transcribeWithWhisper(videoPath, jsonPath, file, timestamp, fileName, totalDuration, deviceID) {
+  try {
+    return new Promise(async (resolve, reject) => {
 
-    const process = spawn('python3', [
-      '-u', '-m', 'whisper',
-      `"${videoPath}"`,
-      '--language', 'en',
-      '--model', 'small',
-      '--device', 'cuda',
-      '--output_format', 'json',
-      '--output_dir', `"${tempFolderPath}"`,
-      '--condition_on_previous_text', 'False',
-    ], { shell: true });
+      const process = spawn('python3', [
+        '-u', '-m', 'whisper',
+        `"${videoPath}"`,
+        '--language', 'en',
+        '--model', 'small',
+        '--device', 'cuda',
+        '--output_format', 'json',
+        '--output_dir', `"${tempFolderPath}"`,
+        '--condition_on_previous_text', 'False',
+      ], { shell: true });
 
-    activeProcesses[timestamp] = { process: process, fileName: fileName }
+      activeProcesses[timestamp] = { process: process, fileName: fileName }
 
 
-    process.stdout.on('data', (data) => {
-      const lines = data.toString('utf8').split('\n');
-      lines.forEach((line) => {
-        console.log('stdout: ' + line);
+      process.stdout.on('data', (data) => {
+        const lines = data.toString('utf8').split('\n');
+        lines.forEach((line) => {
+          console.log('stdout: ' + line);
 
-        if (line.trim().startsWith('[')) {
-          // process the line into the end timestamp
-          try {
-            endTimeTokens = line.split('  ')[0].split(' ')[2].replace(']', '').split(':');
-            endTimeSecs = (parseInt(endTimeTokens[0]) * 60) + (parseInt(endTimeTokens[1].split('.')[0]));
-          } catch (e) {
-            const msg = 'error parsing whisper output: ' + e.message
-            console.log(msg)
-            return;
+          if (line.trim().startsWith('[')) {
+            // process the line into the end timestamp
+            try {
+              endTimeTokens = line.split('  ')[0].split(' ')[2].replace(']', '').split(':');
+              endTimeSecs = (parseInt(endTimeTokens[0]) * 60) + (parseInt(endTimeTokens[1].split('.')[0]));
+            } catch (e) {
+              const msg = 'error parsing whisper output: ' + e.message
+              console.log(msg)
+              return;
+            }
+            const progressPercentage = ((endTimeSecs / totalDuration) * 100).toFixed(2)
+            console.log('progress: ' + progressPercentage + '%');
+            const message = { progress: progressPercentage, status: 'in-progress', file: file, timestamp: timestamp, fileName: fileName, task: 'Transcribing...', deviceID: deviceID };
+            broadcastProgress(message)
           }
-          const progressPercentage = ((endTimeSecs / totalDuration) * 100).toFixed(2)
-          console.log('progress: ' + progressPercentage + '%');
-          const message = { progress: progressPercentage, status: 'in-progress', file: file, timestamp: timestamp, fileName: fileName, task: 'Transcribing...' };
-          broadcastProgress(message)
+        });
+      });
+
+
+      process.on('close', (code) => {
+        if (code !== 0) {
+          return reject(new Error(`Whisper process exited with code ${code}`));
         }
+
+        readJsonFromFile(jsonPath).then((data) => {
+          // delete the temporary JSON file
+          deleteFileIfExists(jsonPath)
+
+          delete activeProcesses[timestamp];
+          return resolve(data);
+        }).catch((e) => {
+          delete activeProcesses[timestamp];
+          const msg = 'ERROR: ' + e.message;
+          console.log(msg)
+          return reject(new Error(msg))
+        })
       });
     });
-
-
-    process.on('close', (code) => {
-      if (code !== 0) {
-        return reject(new Error(`Whisper process exited with code ${code}`));
-      }
-
-      readJsonFromFile(jsonPath).then((data) => {
-        // delete the temporary JSON file
-        deleteFileIfExists(jsonPath)
-
-        delete activeProcesses[timestamp];
-        return resolve(data);
-      }).catch((e) => {
-        delete activeProcesses[timestamp];
-        const msg = 'ERROR: ' + e.message;
-        console.log(msg)
-        return reject(new Error(msg))
-      })
-    });
-  });
+  } catch (e) {
+    console.log("ERROR in transcribe with whisper: ", e);
+  }
 }
 
 
@@ -208,23 +225,27 @@ function transcribeWithWhisper(videoPath, jsonPath, file, timestamp, fileName, t
 
 
 function applySubtitles(videoPath, srtPath, outputPath) {
-  return new Promise((resolve, reject) => {
-    // add the subtitles to the video with ffmpeg
-    const command = `ffmpeg -i "${videoPath}" -i "${srtPath}" -c:v copy -c:a copy -c:s mov_text "${outputPath}"`;
+  try {
+    return new Promise((resolve, reject) => {
+      // add the subtitles to the video with ffmpeg
+      const command = `ffmpeg -i "${videoPath}" -i "${srtPath}" -c:v copy -c:a copy -c:s mov_text "${outputPath}"`;
 
-    console.log('adding subtitles with command: ' + command);
+      console.log('adding subtitles with command: ' + command);
 
-    deleteFileIfExists(outputPath);
+      deleteFileIfExists(outputPath);
 
-    exec(command, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`Error adding subtitles: ${error.message}`);
+      exec(command, (error, stdout, stderr) => {
+        if (error) {
+          console.error(`Error adding subtitles: ${error.message}`);
+          return resolve();
+        }
+        console.log('Subtitles added successfully.');
         return resolve();
-      }
-      console.log('Subtitles added successfully.');
-      return resolve();
-    });
-  })
+      });
+    })
+  } catch (e) {
+    console.log('ERROR in applySubtitles: ', e)
+  }
 }
 
 
@@ -234,62 +255,63 @@ function applySubtitles(videoPath, srtPath, outputPath) {
 
 // Generate and save SRT content, then apply it to the video
 // confidence threshold:(for small model) 0.8 - too low
-function generateSubtitles(videoPath, outputPath, file, timestamp, fileName, confidenceThreshold = 0.95, maxDuration = 8) {
-  return new Promise(async (resolve, reject) => {
-    const srtPath = videoPath.slice(0, videoPath.lastIndexOf('.')) + '.srt';
-    const jsonPath = videoPath.slice(0, videoPath.lastIndexOf('.')) + '.json';
+function generateSubtitles(videoPath, outputPath, file, timestamp, fileName, deviceID, confidenceThreshold = 0.95, maxDuration = 8) {
+  try {
+    return new Promise(async (resolve, reject) => {
+      const srtPath = videoPath.slice(0, videoPath.lastIndexOf('.')) + '.srt';
+      const jsonPath = videoPath.slice(0, videoPath.lastIndexOf('.')) + '.json';
 
-    const totalDuration = await getTotalDuration(videoPath)
-    console.log('total duration (in seconds) of the file: ' + totalDuration)
-
-
-
-    transcribeWithWhisper(videoPath, jsonPath, file, timestamp, fileName, totalDuration).then((whisperResults) => {
-      // readJsonFromFile("C:\\Users\\andre\\Downloads\\Descargo\\subtitles\\test_whisper_output_old.json").then((whisperResults) => { // bypass whisper for debugging and directly use json file
+      const totalDuration = await getTotalDuration(videoPath)
+      console.log('total duration (in seconds) of the file: ' + totalDuration)
 
 
 
+      transcribeWithWhisper(videoPath, jsonPath, file, timestamp, fileName, totalDuration, deviceID).then((whisperResults) => {
+        // readJsonFromFile("C:\\Users\\andre\\Downloads\\Descargo\\subtitles\\test_whisper_output_old.json").then((whisperResults) => { // bypass whisper for debugging and directly use json file
 
-      let srtContent = '';
-      let index = 1;
+        let srtContent = '';
+        let index = 1;
 
-      // filter out low confidence whisper results
-      whisperResults.segments.filter(segment => segment.no_speech_prob < confidenceThreshold)
-        .forEach(segment => {
-          let start = formatTime(segment.start);
-          let end = formatTime(segment.end);
+        // filter out low confidence whisper results
+        whisperResults.segments.filter(segment => segment.no_speech_prob < confidenceThreshold)
+          .forEach(segment => {
+            let start = formatTime(segment.start);
+            let end = formatTime(segment.end);
 
-          let text = segment.text;
+            let text = segment.text;
 
-          // crop the long segments and keep the last part
-          if (segment.end - segment.start > maxDuration) {
-            start = formatTime(segment.end - maxDuration);
-          }
-          // prevent the last segment from going over the length of the video
-          if (segment.end > totalDuration) {
-            end = formatTime(totalDuration);
-          }
-          srtContent += `${index}\n${start} --> ${end}\n${text}\n\n`;
-          index++;
+            // crop the long segments and keep the last part
+            if (segment.end - segment.start > maxDuration) {
+              start = formatTime(segment.end - maxDuration);
+            }
+            // prevent the last segment from going over the length of the video
+            if (segment.end > totalDuration) {
+              end = formatTime(totalDuration);
+            }
+            srtContent += `${index}\n${start} --> ${end}\n${text}\n\n`;
+            index++;
+          });
+
+        srtContent = srtContent.trim();
+
+        console.log('Writing to srt file: ' + srtPath)
+
+        fs.writeFileSync(srtPath, srtContent, { encoding: 'utf-8' });
+
+        applySubtitles(videoPath, srtPath, outputPath).then(() => {
+          // delete temp srt file
+          deleteFileIfExists(srtPath);
+          return resolve();
         });
-
-      srtContent = srtContent.trim();
-
-      console.log('Writing to srt file: ' + srtPath)
-
-      fs.writeFileSync(srtPath, srtContent, { encoding: 'utf-8' });
-
-      applySubtitles(videoPath, srtPath, outputPath).then(() => {
-        // delete temp srt file
-        deleteFileIfExists(srtPath);
-        return resolve();
+      }).catch((e) => {
+        const msg = 'ERROR generating subtitles: ' + e.message
+        console.log(msg);
+        return reject(msg);
       });
-    }).catch((e) => {
-      const msg = 'ERROR generating subtitles: ' + e.message
-      console.log(msg);
-      return reject(msg);
     });
-  });
+  } catch (e) {
+    console.log('ERROR in generateSubtitles: ', e);
+  }
 }
 
 
@@ -314,7 +336,7 @@ function getTotalDuration(input) {
         resolve(duration);
       });
     } catch (e) {
-      console.log('error in getTotalDuration: ' + e.message);
+      console.log('ERROR in getTotalDuration: ', e);
     }
   });
 }
@@ -323,25 +345,33 @@ function getTotalDuration(input) {
 
 
 const processVideoTitle = (title, removeSubtext) => {
-  if (removeSubtext) {
-    title = title.replace(/(\[.*?\]|\(.*?\))/g, '') // optionally remove any text in brackets or parenthesis
-  }
+  try {
+    if (removeSubtext) {
+      title = title.replace(/(\[.*?\]|\(.*?\))/g, '') // optionally remove any text in brackets or parenthesis
+    }
 
-  return title.replace(/[^a-zA-Z0-9\-',$'.()[\]%#@!^{}+=&~; ]/g, '_') // replace special characters with underscores
-    .replace(/\s+/g, ' ') // replace multiple spaces with a space
-    .trim(); //remove trailing and leading whitespace
+    return title.replace(/[^a-zA-Z0-9\-',$'.()[\]%#@!^{}+=&~; ]/g, '_') // replace special characters with underscores
+      .replace(/\s+/g, ' ') // replace multiple spaces with a space
+      .trim(); //remove trailing and leading whitespace
+  } catch (e) {
+    console.log('ERROR in processVideoTitle: ', e);
+  }
 };
 
 
 
 // forcefully deletes an entire folder, use with caution
 function deleteFolderIfExists(path) {
-  if (fs.existsSync(path)) {
-    //delete the folder
-    fs.rmSync(path, { recursive: true, force: true });
-    console.log('deleted the folder: ' + path)
-  } else {
-    console.log('folder does not already exist: ' + path);
+  try {
+    if (fs.existsSync(path)) {
+      //delete the folder
+      fs.rmSync(path, { recursive: true, force: true });
+      console.log('deleted the folder: ' + path)
+    } else {
+      console.log('folder does not already exist: ' + path);
+    }
+  } catch (e) {
+    console.log('ERROR in deleteFolderIfExists: ', e);
   }
 }
 
@@ -349,12 +379,16 @@ function deleteFolderIfExists(path) {
 
 // deletes a file
 function deleteFileIfExists(path) {
-  if (fs.existsSync(path)) {
-    //delete the file
-    fs.unlinkSync(path);
-    console.log('deleted the file: ' + path)
-  } else {
-    console.log('file does not already exist: ' + path);
+  try {
+    if (fs.existsSync(path)) {
+      //delete the file
+      fs.unlinkSync(path);
+      console.log('deleted the file: ' + path)
+    } else {
+      console.log('file does not already exist: ' + path);
+    }
+  } catch (e) {
+    console.log('ERROR in deleteFileIfExists: ', e);
   }
 }
 
@@ -363,53 +397,61 @@ function deleteFileIfExists(path) {
 
 // Change keypath to use actual file
 function createGdriveAuth(gdriveFolderID, keyPath, timestamp) {
-  //write the key content to a file and use it to create the key
-  const tempKeyPath = tempFolderPath + `/${Date.parse(timestamp)}_gdrivekey.json`;
-  fs.writeFileSync(tempKeyPath, keyPath);
-  const key = require(tempKeyPath);
+  try {
+    //write the key content to a file and use it to create the key
+    const tempKeyPath = tempFolderPath + `/${Date.parse(timestamp)}_gdrivekey.json`;
+    fs.writeFileSync(tempKeyPath, keyPath);
+    const key = require(tempKeyPath);
 
-  console.log('creating auth');
-  const auth = new google.auth.GoogleAuth({
-    credentials: key,
-    scopes: ['https://www.googleapis.com/auth/drive.file'],
-  });
-  console.log('done')
-  deleteFileIfExists(tempKeyPath);
-  return google.drive({ version: 'v3', auth });
+    console.log('creating auth');
+    const auth = new google.auth.GoogleAuth({
+      credentials: key,
+      scopes: ['https://www.googleapis.com/auth/drive.file'],
+    });
+    console.log('done')
+    deleteFileIfExists(tempKeyPath);
+    return google.drive({ version: 'v3', auth });
+  } catch (e) {
+    console.log('ERROR in createGdriveAuth: ', e);
+  }
 }
 
 
 async function ensureGdriveFolderExists(gdriveFolderID, playlistName, drive) {
-  // Check if playlist folder exists
-  const folderQuery = `name='${playlistName}' and mimeType='application/vnd.google-apps.folder' and '${gdriveFolderID}' in parents and trashed=false`;
-  const folderResponse = await drive.files.list({
-    q: folderQuery,
-    fields: 'files(id, name)'
-  });
-
-  let playlistFolderID;
-  console.log('folderResponse: ', folderResponse)
-
-  if (folderResponse.data.files.length > 0) {
-    // Folder exists, get its ID
-    playlistFolderID = folderResponse.data.files[0].id;
-    console.log(`Playlist folder '${playlistName}' already exists with ID: ${playlistFolderID}`);
-  } else {
-    // Folder does not exist, create it
-    const createFolderResponse = await drive.files.create({
-      resource: {
-        name: playlistName,
-        mimeType: 'application/vnd.google-apps.folder',
-        parents: [gdriveFolderID]
-      },
-      fields: 'id'
+  try {
+    // Check if playlist folder exists
+    const folderQuery = `name='${playlistName}' and mimeType='application/vnd.google-apps.folder' and '${gdriveFolderID}' in parents and trashed=false`;
+    const folderResponse = await drive.files.list({
+      q: folderQuery,
+      fields: 'files(id, name)'
     });
 
-    playlistFolderID = createFolderResponse.data.id;
-    console.log(`Created playlist folder '${playlistName}' with ID: ${playlistFolderID}`);
-  }
+    let playlistFolderID;
+    console.log('folderResponse: ', folderResponse)
 
-  return playlistFolderID;
+    if (folderResponse.data.files.length > 0) {
+      // Folder exists, get its ID
+      playlistFolderID = folderResponse.data.files[0].id;
+      console.log(`Playlist folder '${playlistName}' already exists with ID: ${playlistFolderID}`);
+    } else {
+      // Folder does not exist, create it
+      const createFolderResponse = await drive.files.create({
+        resource: {
+          name: playlistName,
+          mimeType: 'application/vnd.google-apps.folder',
+          parents: [gdriveFolderID]
+        },
+        fields: 'id'
+      });
+
+      playlistFolderID = createFolderResponse.data.id;
+      console.log(`Created playlist folder '${playlistName}' with ID: ${playlistFolderID}`);
+    }
+
+    return playlistFolderID;
+  } catch (e) {
+    console.log('ERROR in ensureGdriveFolderExists: ', e);
+  }
 }
 
 
@@ -428,12 +470,16 @@ async function ensureDirectoryExists(dirPath) {
 
 
 function updatePaths() {
-  //downloadsPath = outputPath + '/downloads';
-  //tempFolderPath = outputPath + "/temp"
+  try {
+    //downloadsPath = outputPath + '/downloads';
+    //tempFolderPath = outputPath + "/temp"
 
-  // make sure these folders exist
-  ensureDirectoryExists(downloadsPath);
-  ensureDirectoryExists(tempFolderPath);
+    // make sure these folders exist
+    ensureDirectoryExists(downloadsPath);
+    ensureDirectoryExists(tempFolderPath);
+  } catch (e) {
+    console.log('ERROR in updatePaths: ', e);
+  }
 }
 
 
@@ -478,7 +524,7 @@ async function uploadFile(filePath, fileName, drive, gdriveFolderID, playlistNam
 
       resolve();
     } catch (error) {
-      console.error('Error uploading file:', error);
+      console.error('Error in uploadFile:', error);
       reject(error);
     }
   });
@@ -523,23 +569,27 @@ function clearCache(fileName, timestamp) {
 
 
 
-function processFFMPEGLine(fileName, url, lines, totalDuration, timestamp, taskMsg) {
-  for (let i = 0; i < lines.length - 1; i++) {
-    const line = lines[i];
-    const [key, value] = line.split('=');
-    if (key && value) {
-      if (key.trim() === 'out_time_ms') {
-        const currentTime = parseInt(value.trim(), 10) / 1000000;
-        const progressPercentage = (currentTime / totalDuration) * 100;
+function processFFMPEGLine(fileName, url, lines, totalDuration, timestamp, taskMsg, deviceID) {
+  try {
+    for (let i = 0; i < lines.length - 1; i++) {
+      const line = lines[i];
+      const [key, value] = line.split('=');
+      if (key && value) {
+        if (key.trim() === 'out_time_ms') {
+          const currentTime = parseInt(value.trim(), 10) / 1000000;
+          const progressPercentage = (currentTime / totalDuration) * 100;
 
-        if (progressPercentage && (progressPercentage >= 0)) {
-          console.log(`ffmpeg progress: ${progressPercentage.toFixed(2)}%`);
+          if (progressPercentage && (progressPercentage >= 0)) {
+            console.log(`ffmpeg progress: ${progressPercentage.toFixed(2)}%`);
 
-          const message = { progress: progressPercentage.toFixed(2), status: 'in-progress', file: url, timestamp: timestamp, fileName: fileName, task: taskMsg };
-          broadcastProgress(message)
+            const message = { progress: progressPercentage.toFixed(2), status: 'in-progress', file: url, timestamp: timestamp, fileName: fileName, task: taskMsg, deviceID: deviceID };
+            broadcastProgress(message)
+          }
         }
       }
     }
+  } catch (e) {
+    console.log('ERROR in processFFMPEGLine: ', e);
   }
 }
 
@@ -548,29 +598,33 @@ function processFFMPEGLine(fileName, url, lines, totalDuration, timestamp, taskM
 
 
 
-function findPermPath(desiredFileName, format, playlistFolder) {
-  let permPath = ''
-  if(playlistFolder){
-    permPath = `${downloadsPath}/${playlistFolder}/${desiredFileName}`;
-  }else{
+function findPermPath(desiredFileName, format) {
+  try {
+    let permPath = ''
+    //if(playlistFolder){
+    //  permPath = `${downloadsPath}/${playlistFolder}/${desiredFileName}`;
+    //}else{
     permPath = `${downloadsPath}/${desiredFileName}`;
-  }
-  index = 0;
+    //}
+    index = 0;
 
-  let desiredName = desiredFileName.slice(0, desiredFileName.lastIndexOf('.'))
-  console.log('desiredName: ' + desiredName)
+    let desiredName = desiredFileName.slice(0, desiredFileName.lastIndexOf('.'))
+    console.log('desiredName: ' + desiredName)
 
-  // increment the permpath index until it finds a name that isnt already taken
-  while (fs.existsSync(permPath)) {
-    index++;
+    // increment the permpath index until it finds a name that isnt already taken
+    while (fs.existsSync(permPath)) {
+      index++;
 
-    if (playlistFolder) {
-      permPath = `${downloadsPath}/${playlistFolder}/${desiredName}_${index}.${format}`;
-    } else {
+      //if (playlistFolder) {
+      //  permPath = `${downloadsPath}/${playlistFolder}/${desiredName}_${index}.${format}`;
+      //} else {
       permPath = `${downloadsPath}/${desiredName}_${index}.${format}`
+      //}
     }
+    return permPath;
+  } catch (e) {
+    console.log('ERROR in findPermPath: ', e);
   }
-  return permPath;
 }
 
 
@@ -578,65 +632,69 @@ function findPermPath(desiredFileName, format, playlistFolder) {
 
 
 
-function streamVideo(permPath, res, newFile) {
-  return new Promise((resolve, reject) => {
-    console.log('Creating read stream');
+function streamVideo(permPath, res) {
+  try {
+    return new Promise((resolve, reject) => {
+      console.log('Creating read stream');
 
-    const fileStream = fs.createReadStream(permPath);
+      const fileStream = fs.createReadStream(permPath);
 
-    // Set response headers
-    res.setHeader('Content-Disposition', `attachment; filename="${newFile.value}"`);
-    res.setHeader('Content-Type', 'application/octet-stream');
-    res.setHeader('Content-Length', fs.statSync(permPath).size);
+      // Set response headers
+      res.setHeader('Content-Disposition', `attachment; filename="${path.basename(permPath)}"`);
+      res.setHeader('Content-Type', 'application/octet-stream');
 
-    // Listen for chunks of data
-    fileStream.on('data', (chunk) => {
-      console.log(`Sending chunk of size: ${chunk.length}`);
-      res.write(chunk);
-      if (res.flush) {
-        res.flush(); // Force sending the buffer
-      }
+      // Listen for chunks of data
+      fileStream.on('data', (chunk) => {
+        //console.log(`Sending chunk of size: ${chunk.length}`);
+        res.write(chunk);
+        if (res.flush) {
+          res.flush(); // Force sending the buffer
+        }
+      });
+
+      fileStream.on('end', () => {
+        console.log('Stream ended successfully');
+        res.end();
+        //resolve();
+      });
+
+      fileStream.on('error', (err) => {
+        console.error('Error streaming file:', err);
+        res.status(500).send('Error downloading the file.');
+        reject(err);
+      });
+
+      res.on('close', () => {
+        console.log('Stream closed');
+        resolve()
+      });
     });
-
-    fileStream.on('end', () => {
-      console.log('Stream ended successfully');
-      res.end(); // End the response explicitly
-      resolve();
-    });
-
-    fileStream.on('error', (err) => {
-      console.error('Error streaming file:', err);
-      res.status(500).send('Error downloading the file.');
-      reject(err);
-    });
-
-    res.on('close', () => {
-      console.log('Response closed prematurely');
-      reject(new Error('Connection closed before file finished'));
-    });
-  });
+  } catch (e) {
+    console.log('ERROR in streamVideo: ', e);
+  }
 }
 
 
 
 
 async function finishUpload(generateSubs, format, gdrive, resolve, filePath, newFile, gdriveFolderID,
-  gdriveKeyPath, url, timestamp, start, res, playlistFolder, playlistName) {
+  gdriveKeyPath, url, timestamp, start, res, playlistName, deviceID) {
 
   try {
-    let permPath = findPermPath(newFile.value, format, playlistFolder);
+    let permPath = findPermPath(newFile.value, format);
     console.log('permPath: ' + permPath);
 
     //move the file from temp to downloads OR generate the subtitles and write the mp4 with subititles to the permPath
     if (generateSubs && (format === 'mp4')) {
 
-      broadcastProgress({ progress: 0, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Transcribing...' })
-      await generateSubtitles(filePath, permPath, url, timestamp, newFile.value);
+      broadcastProgress({ progress: 0, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Transcribing...', deviceID: deviceID })
+      await generateSubtitles(filePath, permPath, url, timestamp, newFile.value, deviceID);
       // upload the file with captions to google drive
       if (gdrive) {
         const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath, timestamp);
 
         console.log('Uploading to gdrive', newFile.value);
+        broadcastProgress({ progress: 100, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Uploading...', deviceID: deviceID })
         await uploadFile(permPath, newFile.value, drive, gdriveFolderID, playlistName);
       }
     } else {
@@ -645,6 +703,7 @@ async function finishUpload(generateSubs, format, gdrive, resolve, filePath, new
         const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath, timestamp);
 
         console.log('Uploading to gdrive', newFile.value);
+        broadcastProgress({ progress: 100, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Uploading...', deviceID: deviceID })
         await uploadFile(filePath, newFile.value, drive, gdriveFolderID, playlistName);
       }
 
@@ -652,29 +711,21 @@ async function finishUpload(generateSubs, format, gdrive, resolve, filePath, new
       fs.moveSync(filePath, permPath);
     }
 
-    if(!playlistFolder) {
-      broadcastProgress({ progress: 100, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Streaming...' })
-      await streamVideo(permPath, res, newFile);
-    }
 
     clearCache(newFile.value, timestamp);
     console.log(`yt-dlp completed successfully.`);
 
-    let durationSecs = Math.round((Date.now() - start) / 1000);
-    const minutes = Math.trunc(durationSecs / 60).toString().padStart(2, '0');
-    const seconds = (durationSecs % 60).toString().padStart(2, '0');
-    const timeString = `${minutes}:${seconds}`
+
     // send completion message to client and service worker
-    broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed', fileName: newFile.value, timeSpent: timeString });
+    broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed', fileName: path.basename(permPath), startTime: start, task: 'download-completed', deviceID: deviceID });
 
     console.log('DEBUG -_-_-_-_ SENT COMPLETION BROADCAST: ' + newFile.value);
-    console.log(`Download time: ${timeString}`);
     delete activeProcesses[timestamp];
     resolve({ message: 'success', file: url, timestamp: timestamp, fileName: newFile.value });
 
   } catch (e) {
     console.log('ERR completing download: ' + e.message);
-    broadcastProgress({ progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error:e.message });
+    broadcastProgress({ progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error: e.message, deviceID: deviceID });
     delete activeProcesses[timestamp];
     resolve({ message: 'failure', file: url, timestamp: timestamp, fileName: newFile.value });
   }
@@ -700,7 +751,7 @@ const getTitle = (url, cookiePath, newFile, removeSubtext, format) => {
         console.log('getTitle command: ' + command)
         exec(command, (error, stdout, stderr) => {
           if (error) {
-            console.log('### killOverride: '+killOverride)
+            console.log('### killOverride: ' + killOverride)
             console.error(`get title Error: ${error.message}`);
             if (cookiePath && !killOverride) {
               console.log('trying again without cookies...')
@@ -745,415 +796,443 @@ const getTitle = (url, cookiePath, newFile, removeSubtext, format) => {
 
 
 
-const getTitlewShazam = (tempFile, url, cookiePath, newFile, removeSubtext, format, m3u8Title) => {
-  return new Promise(async (resolve, reject) => {
-    console.log('getting title with shazam...');
-    // shazam song recognition
-    let len = 0;
-    if (format === 'mp4') {
-      len = await getTotalDuration(tempFile)
-      if (len < 600) {
-        const audioFilePath = tempFile.replace(/\.[^/.]+$/, '.m4a');
-        deleteFileIfExists(audioFilePath);
+const extractAudio = (videoFile, outputAudioFile) => {
+  try {
+    return new Promise((resolve, reject) => {
+      console.log(`Extracting audio from ${videoFile}...`);
+      const command = `ffmpeg -i "${videoFile}" -vn -acodec aac -b:a 128k "${outputAudioFile}"`;
 
-        // if the format is a video, extract the audio and use that for shazam
-        try {
-          await extractAudio(tempFile, audioFilePath);
-          tempFile = audioFilePath;
-        } catch (e) {
-          console.log('ERROR extracting audio for shazam: ' + e);
-          if (m3u8Title) {
-            console.log('falling back to the original m3u8 title...');
-            return resolve({ title: m3u8Title });
-          } else {
-            console.log('using yt-dlp to fetch and clean the title...');
-            return resolve({ title: yt_title });
+      exec(command, (error, stdout, stderr) => {
+        if (error) {
+          console.error(`Error extracting audio: ${stderr}`);
+          return reject(error);
+        }
+        console.log(`Audio extracted to ${outputAudioFile}`);
+        resolve(outputAudioFile);
+      });
+    });
+  } catch (e) {
+    console.log('ERROR in extractAudio: ', e);
+  }
+};
+
+const getTitlewShazam = (tempFile, url, cookiePath, newFile, removeSubtext, format, m3u8Title) => {
+  try {
+    return new Promise(async (resolve, reject) => {
+      console.log('getting title with shazam...');
+      // shazam song recognition
+      let len = 0;
+      if (format === 'mp4') {
+        len = await getTotalDuration(tempFile)
+        if (len < 600) {
+          const audioFilePath = tempFile.replace(/\.[^/.]+$/, '.m4a');
+          deleteFileIfExists(audioFilePath);
+
+          // if the format is a video, extract the audio and use that for shazam
+          try {
+            await extractAudio(tempFile, audioFilePath);
+            tempFile = audioFilePath;
+          } catch (e) {
+            console.log('ERROR extracting audio for shazam: ' + e);
+            if (m3u8Title) {
+              console.log('falling back to the original m3u8 title...');
+              return resolve({ title: m3u8Title });
+            } else {
+              console.log('using yt-dlp to fetch and clean the title...');
+              return resolve({ title: yt_title });
+            }
           }
         }
       }
-    }
 
-    console.log('\n\ntempfile: ' + tempFile + '\n')
+      console.log('\n\ntempfile: ' + tempFile + '\n')
 
-    shazam.recognise(tempFile, 'en-US').then(async (result) => {
-      if (result) {
-        console.log('shazam result: ')
-        console.log(result)
+      shazam.recognise(tempFile, 'en-US').then(async (result) => {
+        if (result) {
+          console.log('shazam result: ')
+          console.log(result)
 
-        const newTitle = result.track.subtitle + ' - ' + result.track.title;
+          const newTitle = result.track.subtitle + ' - ' + result.track.title;
 
-        const processedTitle = processVideoTitle(newTitle, removeSubtext);
-        console.log('found song: ' + processedTitle + ' | link: ' + result.track.url);
-        newFile.value = processedTitle + '.' + format;
+          const processedTitle = processVideoTitle(newTitle, removeSubtext);
+          console.log('found song: ' + processedTitle + ' | link: ' + result.track.url);
+          newFile.value = processedTitle + '.' + format;
 
-        const metadata = {
-          title: result.track.title,
-          artist: result.track.subtitle,
-          genre: result.track.genres?.primary || 'Unknown Genre',
-          comment: `${result.track.url}`
-        };
+          const metadata = {
+            title: result.track.title,
+            artist: result.track.subtitle,
+            genre: result.track.genres?.primary || 'Unknown Genre',
+            comment: `${result.track.url}`
+          };
 
-        if ((format === 'mp4') && (len < 300)) deleteFileIfExists(tempFile)
-        return resolve({ title: newFile.value, metadata: metadata });
-      } else {
-        // no song found by shazam, fall back on using yt-dlp to fetch the title
-        console.log('No song found by shazam! Fetching yt title...')
-        const yt_title = await getTitle(url, cookiePath, newFile, removeSubtext, format)
+          if ((format === 'mp4') && (len < 300)) deleteFileIfExists(tempFile)
+          return resolve({ title: newFile.value, metadata: metadata });
+        } else {
+          // no song found by shazam, fall back on using yt-dlp to fetch the title
+          console.log('No song found by shazam! Fetching yt title...')
+          const yt_title = await getTitle(url, cookiePath, newFile, removeSubtext, format)
 
-        if ((format === 'mp4') && (len < 300)) deleteFileIfExists(tempFile)
-        return resolve({ title: yt_title });
-      }
-    }).catch(async (e) => {
-      console.log('ERROR getting title with shazam: ' + e);
-      if (m3u8Title) {
-        console.log('falling back to the original m3u8 title...');
+          if ((format === 'mp4') && (len < 300)) deleteFileIfExists(tempFile)
+          return resolve({ title: yt_title });
+        }
+      }).catch(async (e) => {
+        console.log('ERROR getting title with shazam: ' + e);
+        if (m3u8Title) {
+          console.log('falling back to the original m3u8 title...');
 
-        if ((format === 'mp4') && (len < 300)) deleteFileIfExists(tempFile)
-        return resolve({ title: m3u8Title });
-      } else {
-        console.log('using yt-dlp to fetch and clean the title...');
+          if ((format === 'mp4') && (len < 300)) deleteFileIfExists(tempFile)
+          return resolve({ title: m3u8Title });
+        } else {
+          console.log('using yt-dlp to fetch and clean the title...');
 
-        // fall back on using yt-dlp to fetch the title
-        const yt_title = await getTitle(url, cookiePath, newFile, removeSubtext, format);
+          // fall back on using yt-dlp to fetch the title
+          const yt_title = await getTitle(url, cookiePath, newFile, removeSubtext, format);
 
-        if ((format === 'mp4') && (len < 300)) deleteFileIfExists(tempFile)
-        return resolve({ title: yt_title });
-      }
+          if ((format === 'mp4') && (len < 300)) deleteFileIfExists(tempFile)
+          return resolve({ title: yt_title });
+        }
+      });
     });
-  });
+  } catch (e) {
+    console.log('ERROR in getTitleWShazam: ', e);
+  }
 }
 
 
 
 
 
-function ytdlpDownload(bodyObject, res, playlistFolder, playlistName) {
-  let start = Date.now()
-  num_downloads++;
+function ytdlpDownload(bodyObject, res, playlistName) {
+  try {
+    let start = Date.now()
+    num_downloads++;
 
-  return new Promise((resolve, reject) => {
-    ytdlpMain(bodyObject, res);
+    return new Promise((resolve, reject) => {
+      ytdlpMain(bodyObject, res);
 
-    // wrap the main process in another function to enable retries on error
-    function ytdlpMain(bodyObjectInner, res) {
-      console.log('ytdlpMain arguments:');
-      console.log(bodyObjectInner);
+      // wrap the main process in another function to enable retries on error
+      function ytdlpMain(bodyObjectInner, res) {
+        console.log('ytdlpMain arguments:');
+        console.log(bodyObjectInner);
 
-      let { url, format, gdrive, timestamp, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext,
-        normalizeAudio, compressFiles, useShazam, cookiePath, maxDownloads, generateSubs, m3u8Title, useAria2c } = bodyObjectInner;
+        let { url, format, gdrive, timestamp, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext,
+          normalizeAudio, compressFiles, useShazam, cookiePath, maxDownloads, generateSubs, m3u8Title, useAria2c, deviceID } = bodyObjectInner;
 
-      if (playlistFolder) {
-        ensureDirectoryExists(downloadsPath + '/' + playlistFolder);
-      }
+        //if (playlistFolder) {
+        //  ensureDirectoryExists(downloadsPath + '/' + playlistFolder);
+        //}
 
-      max_concurrent_downloads = maxDownloads || 10;
-      console.log('updated max_concurrent downloads to ' + max_concurrent_downloads)
+        max_concurrent_downloads = maxDownloads || 10;
+        console.log('updated max_concurrent downloads to ' + max_concurrent_downloads)
 
-      updatePaths();
-
-
-      // Uniquely name the temp file using the timestamp
-      let timestamp_date = Date.parse(timestamp)
-      let tempFile = timestamp_date + '.' + format;
-      let tempFilePath = tempFolderPath + '/' + tempFile;
-      console.log('temp file: ' + tempFile);
+        updatePaths();
 
 
-      // Construct yt-dlp command arguments
-      let args = [`"${url}"`, '-o', `"${tempFilePath}"`];
-
-      // if using cookies, then write the cookies to a temporary text file and store the path to this in cookiePath
-      if (cookiePath) {
-        const cookieFilePath = tempFolderPath + `/${timestamp_date}_cookies.txt`;
-        fs.writeFileSync(cookieFilePath, cookiePath.trim(), 'utf8');
-        cookiePath = cookieFilePath
-
-        args.push('--cookies', `"${cookiePath.replace(/\\/g, '/')}"`);
-     }
-
-      // use ytdlp to download the video concurrently 8 segments at a time
-      if (useAria2c) {
-        args.push('--progress-template', '"Downloading: %(progress._percent_str)s @ %(progress.speed)s ETA %(progress.eta)s"',
-          '--concurrent-fragments', '8',
-          '--retries', '10',
-          '--fragment-retries', '10')
-      }
-
-      if (format === 'mp4') {
-        args.push('-f', 'bv+ba/b', '--merge-output-format', 'mp4');
-      } else {
-        args.push('-f', 'ba/b', '-f', 'm4a');
-      }
-
-      console.log('spawning yt-dlp..')
-      console.log(args)
+        // Uniquely name the temp file using the timestamp
+        let timestamp_date = Date.parse(timestamp)
+        let tempFile = timestamp_date + '.' + format;
+        let tempFilePath = tempFolderPath + '/' + tempFile;
+        console.log('temp file: ' + tempFile);
 
 
-      let prevData = -1;
-      let noRestart = false;
-      // Initialize yt-dlp process
-      const ytDlpProcess = spawn('yt-dlp', args
-        , {
-          cwd: tempFolderPath,
-          shell: true,
+        // Construct yt-dlp command arguments
+        let args = [`"${url}"`, '-o', `"${tempFilePath}"`];
+
+        // if using cookies, then write the cookies to a temporary text file and store the path to this in cookiePath
+        if (cookiePath) {
+          const cookieFilePath = tempFolderPath + `/${timestamp_date}_cookies.txt`;
+          fs.writeFileSync(cookieFilePath, cookiePath.trim(), 'utf8');
+          cookiePath = cookieFilePath
+
+          args.push('--cookies', `"${cookiePath.replace(/\\/g, '/')}"`);
         }
-      );
 
-      let newFile = { value: 'fetching... ' }
-      if (m3u8Title) {
-        newFile.value = m3u8Title + '.mp4';
-      }
+        // use ytdlp to download the video concurrently 8 segments at a time
+        if (useAria2c) {
+          args.push('--progress-template', '"Downloading: %(progress._percent_str)s @ %(progress.speed)s ETA %(progress.eta)s"',
+            '--concurrent-fragments', '8',
+            '--retries', '10',
+            '--fragment-retries', '10')
+        }
 
-      let titlePromise = null
-      if (!useShazam && !m3u8Title) {
-        console.log('calling getTitle...')
-        titlePromise = getTitle(url, cookiePath, newFile, removeSubtext, format);
-      }
+        if (format === 'mp4') {
+          args.push('-f', 'bv+ba/b', '--merge-output-format', 'mp4');
+        } else {
+          args.push('-f', 'ba/b', '-f', 'm4a');
+        }
 
-      activeProcesses[timestamp] = { process: ytDlpProcess, fileName: newFile.value }
+        console.log('spawning yt-dlp..')
+        console.log(args)
 
-      // Listen to yt-dlp stderr for debugging
-      ytDlpProcess.stderr.on('data', (data) => {
-        const lines = data.toString().split('\n');
 
-        lines.forEach(line => {
-          console.log('stderr: ' + line)
+        let prevData = -1;
+        let noRestart = false;
+        // Initialize yt-dlp process
+        const ytDlpProcess = spawn('yt-dlp', args
+          , {
+            cwd: tempFolderPath,
+            shell: true,
+          }
+        );
+
+        let newFile = { value: 'fetching... ' }
+        if (m3u8Title) {
+          newFile.value = m3u8Title + '.mp4';
+        }
+
+        let titlePromise = null
+        if (!useShazam && !m3u8Title) {
+          console.log('calling getTitle...')
+          titlePromise = getTitle(url, cookiePath, newFile, removeSubtext, format);
+        }
+
+        activeProcesses[timestamp] = { process: ytDlpProcess, fileName: newFile.value }
+
+        // Listen to yt-dlp stderr for debugging
+        ytDlpProcess.stderr.on('data', (data) => {
+          const lines = data.toString().split('\n');
+
+          lines.forEach(line => {
+            console.log('stderr: ' + line)
+          });
         });
-      });
 
-      // Listen to yt-dlp stdout for progress updates
-      ytDlpProcess.stdout.on('data', (data) => {
-        const lines = data.toString().split('\n');
+        // Listen to yt-dlp stdout for progress updates
+        ytDlpProcess.stdout.on('data', (data) => {
+          const lines = data.toString().split('\n');
 
-        lines.forEach(line => {
-          // Example yt-dlp progress line:
-          // [download]   1.2% of 10.00MiB at 1.00MiB/s ETA 00:09
-          if (useAria2c) {
-            try {
-              if (line.includes('Downloading: ')) {
-                const progressPercent = line.match(/Downloading:\s+(\d+(\.\d+)?)%/)[1];
-                if (prevData != progressPercent) {
+          lines.forEach(line => {
+            // Example yt-dlp progress line:
+            // [download]   1.2% of 10.00MiB at 1.00MiB/s ETA 00:09
+            if (useAria2c) {
+              try {
+                if (line.includes('Downloading: ')) {
+                  const progressPercent = line.match(/Downloading:\s+(\d+(\.\d+)?)%/)[1];
+                  if (prevData != progressPercent) {
+                    prevData = progressPercent;
+                    console.log('aria2c progress: ' + progressPercent)
+
+                    // Broadcast progress to clients with timestamp
+                    const message = { progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Downloading...', deviceID: deviceID };
+                    broadcastProgress(message)
+                  }
+                } else if (line.includes('fragment not found; Skipping fragment ')) {
+                  noRestart = true;
+                } else {
+                  console.log('stdout: ' + line)
+                }
+              } catch (e) {
+                console.log('ERROR in aria2c progress parsing: ' + e.message);
+                return;
+              }
+            } else {
+              const progressMatch = line.match(/\[download\]\s+(\d+(\.\d+)?)% of/);
+              if (progressMatch) {
+                const progressPercent = parseFloat(progressMatch[1]);
+                if (progressPercent !== prevData) {
                   prevData = progressPercent;
-                  console.log('aria2c progress: ' + progressPercent)
-
+                  console.log('ytdlp progress: ' + progressPercent);
                   // Broadcast progress to clients with timestamp
-                  const message = { progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Downloading...' };
+                  const message = { progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Downloading...', deviceID: deviceID };
                   broadcastProgress(message)
                 }
-              } else if (line.includes('fragment not found; Skipping fragment ')) {
+              } else if (line.includes('Giving up after ')) {
                 noRestart = true;
-              } else {
-                console.log('stdout: ' + line)
               }
-            } catch (e) {
-              console.log('ERROR in aria2c progress parsing: ' + e.message);
+            }
+          });
+        });
+
+
+        ytDlpProcess.on('close', async (code) => {
+          if (code !== 0 && !noRestart) {
+            console.error(`error: yt-dlp exited with code ${code}`);
+
+            console.log('### killOverride at close: ' + killOverride)
+
+            //retry the yt-dlp process but without cookies
+            if (cookiePath && !killOverride) {
+              console.log('Retrying without cookies...');
+              ytdlpMain({ ...bodyObject, cookiePath: '' }, res);
               return;
             }
-          } else {
-            const progressMatch = line.match(/\[download\]\s+(\d+(\.\d+)?)% of/);
-            if (progressMatch) {
-              const progressPercent = parseFloat(progressMatch[1]);
-              if (progressPercent !== prevData) {
-                prevData = progressPercent;
-                console.log('ytdlp progress: ' + progressPercent);
-                // Broadcast progress to clients with timestamp
-                const message = { progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Downloading...' };
-                broadcastProgress(message)
-              }
-            } else if (line.includes('Giving up after ')) {
-              noRestart = true;
-            }
-          }
-        });
-      });
 
-
-      ytDlpProcess.on('close', async (code) => {
-        if (code !== 0 && !noRestart) {
-          console.error(`error: yt-dlp exited with code ${code}`);
-
-          console.log('### killOverride at close: '+killOverride)
-
-          //retry the yt-dlp process but without cookies
-          if (cookiePath && !killOverride) {
-            console.log('Retrying without cookies...');
-            ytdlpMain({ ...bodyObject, cookiePath: '' }, res);
+            const message = { progress: 0, status: 'error', file: url, timestamp: timestamp, fileName: newFile.value, error: 'error in ytdlp', deviceID: deviceID };
+            broadcastProgress(message);
+            clearCache(newFile.value, timestamp)
+            delete activeProcesses[timestamp];
+            resolve({ message: 'failure', file: url, timestamp: timestamp });
             return;
           }
 
-          const message = { progress: 0, status: 'error', file: url, timestamp: timestamp, fileName: newFile.value, error:'error in ytdlp' };
-          broadcastProgress(message);
-          clearCache(newFile.value, timestamp)
-          delete activeProcesses[timestamp];
-          resolve({ message: 'failure', file: url, timestamp: timestamp });
-          return;
-        }
-
-        if (useShazam) {
-          if (normalizeAudio) {
-            newFile.value = Date.parse(timestamp) + '_normalized.' + format;
+          if (useShazam) {
+            if (normalizeAudio) {
+              newFile.value = Date.parse(timestamp) + '_normalized.' + format;
+            } else {
+              newFile.value = Date.parse(timestamp) + '.' + format;
+            }
           } else {
-            newFile.value = Date.parse(timestamp) + '.' + format;
-          }
-        } else {
-          broadcastProgress({ progress: 100, status: 'in-progress', file: url, timestamp: timestamp, fileName: 'fetching... ', task: 'Renaming...' })
-          await titlePromise;
-          console.log(' ------------- cleaned title: ' + newFile.value)
-        }
-
-        let filePath = tempFolderPath + '/' + newFile.value;
-
-
-        // start the shazam call
-        let shazamPromise = null;
-        if (useShazam) {
-          shazamPromise = getTitlewShazam(tempFilePath, url, cookiePath, newFile, removeSubtext, format, m3u8Title);
-        }
-//optionally normalize the audio
-        if (normalizeAudio || compressFiles) {
-          const totalDuration = await getTotalDuration(tempFilePath);
-          deleteFileIfExists(filePath);
-
-          //normalize the audio and save it to the new path (renaming it)
-          let ffmpegArgs = [
-            '-i', tempFilePath,
-            '-c:a', 'aac',  // re-encode audio to aac
-          ]
-
-          if (normalizeAudio) {
-            ffmpegArgs.push('-af', 'loudnorm=I=-16:TP=-1.5:LRA=11')
+            broadcastProgress({ progress: 100, status: 'in-progress', file: url, timestamp: timestamp, fileName: 'fetching... ', task: 'Renaming...', deviceID: deviceID })
+            await titlePromise;
+            console.log(' ------------- cleaned title: ' + newFile.value)
           }
 
-          if (compressFiles) {
-            ffmpegArgs.push('-b:a', '96k', // audio bitrate, 128k is about no effect (depending on source audio)
-              '-c:v', 'libx264',  // H265 provides better compression than H264 but less widely compatible
-              '-crf', '33',       // constant rate factor: controls quality (28 is about same as no effect), increase -> smaller, decrease -> larger
-            )
+          let filePath = tempFolderPath + '/' + newFile.value;
+
+
+          // start the shazam call
+          let shazamPromise = null;
+          if (useShazam) {
+            shazamPromise = getTitlewShazam(tempFilePath, url, cookiePath, newFile, removeSubtext, format, m3u8Title);
+          }
+          //optionally normalize the audio
+          if (normalizeAudio || compressFiles) {
+            const totalDuration = await getTotalDuration(tempFilePath);
+            deleteFileIfExists(filePath);
+
+            //normalize the audio and save it to the new path (renaming it)
+            let ffmpegArgs = [
+              '-i', tempFilePath,
+              '-c:a', 'aac',  // re-encode audio to aac
+            ]
+
+            if (normalizeAudio) {
+              ffmpegArgs.push('-af', 'loudnorm=I=-16:TP=-1.5:LRA=11')
+            }
+
+            if (compressFiles) {
+              ffmpegArgs.push('-b:a', '96k', // audio bitrate, 128k is about no effect (depending on source audio)
+                '-c:v', 'libx264',  // H265 provides better compression than H264 but less widely compatible
+                '-crf', '33',       // constant rate factor: controls quality (28 is about same as no effect), increase -> smaller, decrease -> larger
+              )
+            } else {
+              if (!normalizeAudio) ffmpegArgs.push('-c:a', 'copy');
+              ffmpegArgs.push('-c:v', 'copy')
+            }
+
+            ffmpegArgs.push(filePath,
+              '-threads', `${os.cpus().length - 1}`,
+              '-progress', 'pipe:1',
+              '-nostats')
+
+            console.log('ffmpeg command args: ', ffmpegArgs);
+
+            const ffmpegProcess = spawn('ffmpeg', ffmpegArgs);
+
+            activeProcesses[timestamp] = { process: ffmpegProcess, fileName: newFile.value }
+
+            let progressData = '';
+
+            ffmpegProcess.stdout.on('data', (chunk) => {
+              progressData += chunk.toString();
+
+              // iterate over data's lines
+              const lines = progressData.split('\n');
+              let taskMsg = compressFiles ? 'Compressing...' : 'Normalizing...';
+              processFFMPEGLine(newFile.value, url, lines, totalDuration, timestamp, taskMsg, deviceID);
+              progressData = lines[lines.length - 1];
+            });
+
+            //stderr output for debugging
+            ffmpegProcess.stderr.on('data', (data) => {
+              console.error(`stderr: ${data}`);
+            });
+
+            ffmpegProcess.on('close', async (code) => {
+              console.log(`ffmpeg exited with code ${code}`);
+              if (code !== 0) {
+                //clean up cached files
+                clearCache(newFile.value, timestamp);
+                delete activeProcesses[timestamp];
+
+                // notify clients of error
+                const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error: 'error in ffmpeg', deviceID: deviceID };
+                broadcastProgress(errorMessage);
+                resolve(errorMessage);
+                return;
+              } else {
+                // rename the file with shazam API from gettitlewshazam
+                if (useShazam && shazamPromise) {
+                  await shazamPromise;
+
+                  console.log('got title with shazam: ' + newFile.value);
+                  let newShazamPath = tempFolderPath + '\\' + newFile.value;
+
+                  //rename normalized file with path from shazam
+                  try {
+                    fs.renameSync(filePath, newShazamPath);
+                  } catch (e) {
+                    console.log('ERROR renaming file: ' + e.message)
+                    //clean up cached files
+                    clearCache(newFile.value, timestamp);
+                    delete activeProcesses[timestamp];
+
+                    // notify clients of error
+                    const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error: 'error renaming file', deviceID: deviceID };
+                    broadcastProgress(errorMessage);
+                    resolve(errorMessage);
+                    return;
+                  }
+
+                  filePath = newShazamPath;
+                }
+
+                finishUpload(generateSubs, format, gdrive, resolve, filePath, newFile, gdriveFolderID, gdriveKeyPath, url, timestamp, start, res, playlistName, deviceID);
+
+                return;
+              }
+            });
+
           } else {
-            if(!normalizeAudio)  ffmpegArgs.push('-c:a', 'copy');
-            ffmpegArgs.push('-c:v', 'copy')
-          }
+            // rename the file with shazam API from gettitlewshazam or rename it with ytdlp
+            try {
+              if (useShazam && shazamPromise) {
+                broadcastProgress({ progress: 100, status: 'in-progress', file: url, timestamp: timestamp, fileName: 'fetching... ', task: 'Renaming...', deviceID: deviceID })
+                await shazamPromise;
+                console.log('got title with shazam: ' + newFile.value);
+                let newShazamPath = tempFolderPath + '/' + newFile.value;
 
-          ffmpegArgs.push(filePath,
-            '-threads', `${os.cpus().length - 1}`,
-            '-progress', 'pipe:1',
-            '-nostats')
+                fs.renameSync(tempFilePath, newShazamPath);
 
-          console.log('ffmpeg command args: ', ffmpegArgs);
+                filePath = newShazamPath;
+              } else {
+                // rename the file to the title fetched by yt-dlp
+                fs.renameSync(tempFilePath, filePath);
+              }
+            } catch (e) {
+              console.log('ERROR renaming file: ' + e.message)
 
-          const ffmpegProcess = spawn('ffmpeg', ffmpegArgs);
-
-          activeProcesses[timestamp] = { process: ffmpegProcess, fileName: newFile.value }
-
-          let progressData = '';
-
-          ffmpegProcess.stdout.on('data', (chunk) => {
-            progressData += chunk.toString();
-
-            // iterate over data's lines
-            const lines = progressData.split('\n');
-            let taskMsg = compressFiles ? 'Compressing...' : 'Normalizing...';
-            processFFMPEGLine(newFile.value, url, lines, totalDuration, timestamp, taskMsg);
-            progressData = lines[lines.length - 1];
-          });
-
-          //stderr output for debugging
-          ffmpegProcess.stderr.on('data', (data) => {
-            console.error(`stderr: ${data}`);
-          });
-
-          ffmpegProcess.on('close', async (code) => {
-            console.log(`ffmpeg exited with code ${code}`);
-            if (code !== 0) {
               //clean up cached files
               clearCache(newFile.value, timestamp);
               delete activeProcesses[timestamp];
 
               // notify clients of error
-              const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error: 'error in ffmpeg' };
+              const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error: 'error renaming file', deviceID: deviceID };
               broadcastProgress(errorMessage);
               resolve(errorMessage);
               return;
-            } else {
-              // rename the file with shazam API from gettitlewshazam
-              if (useShazam && shazamPromise) {
-                await shazamPromise;
-
-                console.log('got title with shazam: ' + newFile.value);
-                let newShazamPath = tempFolderPath + '\\' + newFile.value;
-
-                //rename normalized file with path from shazam
-                try {
-                  fs.renameSync(filePath, newShazamPath);
-                } catch (e) {
-                  console.log('ERROR renaming file: ' + e.message)
-                  //clean up cached files
-                  clearCache(newFile.value, timestamp);
-                  delete activeProcesses[timestamp];
-
-                  // notify clients of error
-                  const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error: 'error renaming file' };
-                  broadcastProgress(errorMessage);
-                  resolve(errorMessage);
-                  return;
-                }
-
-                filePath = newShazamPath;
-              }
-
-              finishUpload(generateSubs, format, gdrive, resolve, filePath, newFile, gdriveFolderID, gdriveKeyPath, url, timestamp, start, res, playlistFolder, playlistName);
-
-              return;
             }
-          });
 
-        } else {
-          // rename the file with shazam API from gettitlewshazam or rename it with ytdlp
-          try {
-            if (useShazam && shazamPromise) {
-              broadcastProgress({ progress: 100, status: 'in-progress', file: url, timestamp: timestamp, fileName: 'fetching... ', task: 'Renaming...' })
-              await shazamPromise;
-              console.log('got title with shazam: ' + newFile.value);
-              let newShazamPath = tempFolderPath + '/' + newFile.value;
+            finishUpload(generateSubs, format, gdrive, resolve, filePath, newFile, gdriveFolderID, gdriveKeyPath,
+              url, timestamp, start, res, playlistName, deviceID);
 
-              fs.renameSync(tempFilePath, newShazamPath);
-
-              filePath = newShazamPath;
-            } else {
-              // rename the file to the title fetched by yt-dlp
-              fs.renameSync(tempFilePath, filePath);
-            }
-          } catch (e) {
-            console.log('ERROR renaming file: ' + e.message)
-
-            //clean up cached files
-            clearCache(newFile.value, timestamp);
-            delete activeProcesses[timestamp];
-
-            // notify clients of error
-            const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error:'error renaming file' };
-            broadcastProgress(errorMessage);
-            resolve(errorMessage);
             return;
           }
+        });
 
-          finishUpload(generateSubs, format, gdrive, resolve, filePath, newFile, gdriveFolderID, gdriveKeyPath,
-            url, timestamp, start, res, playlistFolder, playlistName);
-
+        ytDlpProcess.on('error', (error) => {
+          console.error(`Error executing yt-dlp: ${error.message}`);
+          broadcastProgress({ progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error: 'error executing ytdlp', deviceID: deviceID });
+          delete activeProcesses[timestamp];
+          resolve({ message: 'failure', timestamp: timestamp });
           return;
-        }
-      });
+        });
 
-      ytDlpProcess.on('error', (error) => {
-        console.error(`Error executing yt-dlp: ${error.message}`);
-        broadcastProgress({ progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error:'error executing ytdlp' });
-        delete activeProcesses[timestamp];
-        resolve({ message: 'failure', timestamp: timestamp });
-        return;
-      });
-
-    }
-  });
+      }
+    });
+  } catch (e) {
+    console.log('ERROR in ytdlpDownload: ', e)
+  }
 }
 
 
@@ -1191,7 +1270,7 @@ app.post('/stop_download', async (req, res) => {
 
               delete activeProcesses[timestamp];
 
-              process.on('close', () =>{
+              process.on('close', () => {
                 setTimeout(() => {
                   resolve();
                 }, 200)
@@ -1224,54 +1303,54 @@ app.post('/stop_download', async (req, res) => {
 
 
 app.post('/kill_processes', async (req, res) => {
-  try{
-  console.log('--- killing all active processes ---');
-  abortAllPlaylists = true; // set the abort playlists flag to stop new videos from being downloaded
-  killOverride = true;
-
-  const killPromises = Object.values(activeProcesses).map(processInfo => {
-    const process = processInfo.process;
-    console.log('Attempting to kill process ' + process.pid);
-
-
-    return new Promise((resolve, reject) => {
-      try {
-        kill(process.pid, 'SIGINT', (err) => {
-          if (err) {
-            console.error(`Failed to kill process ${process.pid}:`, err);
-            reject(err);
-          } else {
-            console.log('KILLED PROCESS ------ ' + process.pid);
-            process.on('close', () =>{
-              setTimeout(() => {
-                resolve();
-              }, 200)
-            })
-          }
-        });
-      } catch (e) {
-        console.error('Error when killing processes:', e.message);
-        reject(e);
-      }
-    });
-  });
-
   try {
-    await Promise.all(killPromises);
-    killOverride = false;
-    activeProcesses = {};
-    num_downloads = 0;
-    deleteFolderIfExists(tempFolderPath)
-    deleteFolderIfExists(downloadsFolderPath)
+    console.log('--- killing all active processes ---');
+    abortAllPlaylists = true; // set the abort playlists flag to stop new videos from being downloaded
+    killOverride = true;
 
-    res.send({ message: 'Success: All processes stopped' });
-  } catch (err) {
-    console.error('One or more processes failed to stop:', err);
-    res.send({ message: 'Error stopping some processes', error: err.message });
+    const killPromises = Object.values(activeProcesses).map(processInfo => {
+      const process = processInfo.process;
+      console.log('Attempting to kill process ' + process.pid);
+
+
+      return new Promise((resolve, reject) => {
+        try {
+          kill(process.pid, 'SIGINT', (err) => {
+            if (err) {
+              console.error(`Failed to kill process ${process.pid}:`, err);
+              reject(err);
+            } else {
+              console.log('KILLED PROCESS ------ ' + process.pid);
+              process.on('close', () => {
+                setTimeout(() => {
+                  resolve();
+                }, 200)
+              })
+            }
+          });
+        } catch (e) {
+          console.error('Error when killing processes:', e.message);
+          reject(e);
+        }
+      });
+    });
+
+    try {
+      await Promise.all(killPromises);
+      killOverride = false;
+      activeProcesses = {};
+      num_downloads = 0;
+      deleteFolderIfExists(tempFolderPath)
+      deleteFolderIfExists(downloadsPath)
+
+      res.send({ message: 'Success: All processes stopped' });
+    } catch (err) {
+      console.error('One or more processes failed to stop:', err);
+      res.send({ message: 'Error stopping some processes', error: err.message });
+    }
+  } catch (e) {
+    console.log('ERROR in /kill_processes: ', e)
   }
-} catch(e){
-  console.log('ERROR in /kill_processes: ', e)
-}
 });
 
 
@@ -1281,16 +1360,16 @@ app.post('/kill_processes', async (req, res) => {
 
 // endpoint to handle download requests
 app.post('/download', async (req, res) => {
-  try{
-  console.log('got download request')
-  //res.send({message:'success'})
-  let response = await ytdlpDownload(req.body, res, '', '').finally(() => { num_downloads-- });
-  if(response.message !== 'success') {
-    res.send(response);
+  try {
+    console.log('got download request')
+    //res.send({message:'success'})
+    let response = await ytdlpDownload(req.body, res, '').finally(() => { num_downloads-- });
+    if (response.message !== 'success') {
+      res.send(response);
+    }
+  } catch (e) {
+    console.log('ERROR in /download: ', e)
   }
-}catch(e) {
-  console.log('ERROR in /download: ', e)
-}
 });
 
 
@@ -1301,7 +1380,11 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+
+
+/*
 function streamZipPlaylist(res, playlistFolder) {
+  try{
   return new Promise((resolve, reject) => {
     const archive = archiver('zip', {
       zlib: { level: 9 }, // Compression level
@@ -1331,115 +1414,121 @@ function streamZipPlaylist(res, playlistFolder) {
 
     archive.finalize();
   });
-})
+});
+}catch(e){
+  console.log('ERROR in streamZipPlaylist: ',e)
 }
+}
+*/
+
 
 
 //endpoint to handle playlist requests
 app.post('/playlist', (req, res) => {
-  try{
-  abortAllPlaylists = false;
-  let playlistFolder = Date.now();
+  try {
+    abortAllPlaylists = false;
+    let playlistTimestamp = Date.now();
 
 
-  const { playlistURL, format, gdrive, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext,
-    normalizeAudio, compressFiles, useShazam, cookiePath, maxDownloads, generateSubs, m3u8Title, useAria2c } = req.body;
-  console.log('received playlist request!');
+    const { playlistURL, format, gdrive, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext,
+      normalizeAudio, compressFiles, useShazam, cookiePath, maxDownloads, generateSubs, m3u8Title, useAria2c, deviceID } = req.body;
+    console.log('received playlist request!');
+    res.send({ message: 'in-progress' })
 
-  let command = `yt-dlp --flat-playlist -j "${playlistURL}"`
-  let cookieFilePath = '';
 
-  if (cookiePath) {
-    ensureDirectoryExists(tempFolderPath);
-    cookieFilePath = tempFolderPath + `/${playlistFolder}_cookies.txt`;
-    fs.writeFileSync(cookieFilePath, cookiePath.trim(), 'utf8');
+    let command = `yt-dlp --flat-playlist -j "${playlistURL}"`
+    let cookieFilePath = '';
 
-    command += ` --cookies "${cookieFilePath.replace(/\\/g, '/')}"`
-  }
+    if (cookiePath) {
+      ensureDirectoryExists(tempFolderPath);
+      cookieFilePath = tempFolderPath + `/${playlistTimestamp}_cookies.txt`;
+      fs.writeFileSync(cookieFilePath, cookiePath.trim(), 'utf8');
 
-  exec(command, async (error, stdout, stderr) => {
-    if (error) {
-      const message = 'ERR in flatten playlist - ' + error.message;
-      console.log(message);
-      res.send({ message: 'failure' });
-      return;
+      command += ` --cookies "${cookieFilePath.replace(/\\/g, '/')}"`
     }
 
-    const videoURLs = stdout.split('\n')
-      .filter(line => line.trim())
-      .map(line => JSON.parse(line).url);
-
-    const firstVideo = JSON.parse(stdout.split('\n')[0].trim());
-    const playlistName = firstVideo.playlist_title + ' -- ' + firstVideo.playlist_channel;
-    console.log('-----playlistName: ');
-    console.log(playlistName);
-
-
-    console.log('video urls:');
-    console.log(videoURLs);
-
-
-    const downloadPromises = [];
-    // download each video
-    for (urlNo in videoURLs) {
-      console.log('#### num downloads: ' + num_downloads + '/' + max_concurrent_downloads);
-      while (num_downloads >= max_concurrent_downloads) {
-        console.log('WARN: Max concurrent downloads reached, cur: ' + num_downloads + '! Polling until there is room...')
-        await delay(1000); // Check every three seconds if there is room to start the download
+    exec(command, async (error, stdout, stderr) => {
+      if (error) {
+        const message = 'ERR in flatten playlist - ' + error.message;
+        console.log(message);
+        return;
       }
 
-      if (abortAllPlaylists) {
-        break;
+      const videoURLs = stdout.split('\n')
+        .filter(line => line.trim())
+        .map(line => JSON.parse(line).url);
+
+      const firstVideo = JSON.parse(stdout.split('\n')[0].trim());
+      const playlistName = firstVideo.playlist_title + ' -- ' + firstVideo.playlist_channel;
+      console.log('-----playlistName: ');
+      console.log(playlistName);
+
+
+      console.log('video urls:');
+      console.log(videoURLs);
+
+
+      const downloadPromises = [];
+      // download each video
+      for (urlNo in videoURLs) {
+        console.log('#### num downloads: ' + num_downloads + '/' + max_concurrent_downloads);
+        while (num_downloads >= max_concurrent_downloads) {
+          console.log('WARN: Max concurrent downloads reached, cur: ' + num_downloads + '! Polling until there is room...')
+          await delay(1000); // Check every three seconds if there is room to start the download
+        }
+
+        if (abortAllPlaylists) {
+          break;
+        }
+
+        url = videoURLs[urlNo];
+
+        console.log('---- playlist: downloading ' + url);
+        let timestamp = new Date().toISOString();
+        bodyObject = {
+          url, format, gdrive, timestamp, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext,
+          normalizeAudio, compressFiles, useShazam, cookiePath, maxDownloads, generateSubs, m3u8Title, useAria2c, deviceID
+        };
+
+        const dlPromise = ytdlpDownload(bodyObject, res, playlistName).finally(() => { num_downloads-- });
+        downloadPromises.push(dlPromise);
+
+        // wait for a quarter a second to not overload the server
+        await delay(250);
       }
 
-      url = videoURLs[urlNo];
-
-      console.log('---- playlist: downloading ' + url);
-      let timestamp = new Date().toISOString();
-      bodyObject = {
-        url, format, gdrive, timestamp, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext,
-        normalizeAudio, compressFiles, useShazam, cookiePath, maxDownloads, generateSubs, m3u8Title, useAria2c
-      };
-
-      const dlPromise = ytdlpDownload(bodyObject, res, playlistFolder, playlistName).finally(() => { num_downloads-- });
-      downloadPromises.push(dlPromise);
-
-      // wait for a quarter a second to not overload the server
-      await delay(250);
-    }
-
-    // create the google drive folder if using gdrive
-    if (gdrive) {
-      ensureGdriveFolderExists(gdriveFolderID, playlistName, createGdriveAuth(gdriveFolderID, gdriveKeyPath));
-    }
+      // create the google drive folder if using gdrive
+      if (gdrive) {
+        ensureGdriveFolderExists(gdriveFolderID, playlistName, createGdriveAuth(gdriveFolderID, gdriveKeyPath));
+      }
 
 
 
-    await Promise.all(downloadPromises);
-    if (cookieFilePath) {
-      deleteFileIfExists(cookieFilePath);
-    }
+      await Promise.all(downloadPromises);
+      if (cookieFilePath) {
+        deleteFileIfExists(cookieFilePath);
+      }
 
-    // downloads are finished
-    console.log('All downloads are completed! Zipping files and streaming them...')
+      // downloads are finished
+      console.log('All downloads are completed! Zipping files and streaming them...')
 
-    res.setHeader('Content-Disposition', `attachment; filename="${playlistName}.zip"`);
-    res.setHeader('Content-Type', 'application/zip');
+      //res.setHeader('Content-Disposition', `attachment; filename="${playlistName}.zip"`);
+      //res.setHeader('Content-Type', 'application/zip');
 
-    try {
-      await streamZipPlaylist(res, playlistFolder);
+      //try {
+      //  await streamZipPlaylist(res, playlistFolder);
 
-      console.log('Archiving complete! Sending broadcast to client... ');
+      //  console.log('Archiving complete! Sending broadcast to client... ');
 
-      const message = { status: 'playlist-completed', playlistName: playlistName };
+      const message = { status: 'playlist-completed', playlistName: playlistName, deviceID: deviceID };
       broadcastProgress(message)
 
-    } catch (err) {
-      console.error('Error during archiving:', err);
-      res.send({message: 'failure'});
-     }
+      //} catch (err) {
+      //  console.error('Error during archiving:', err);
+      //  res.send({message: 'failure'});
+      // }
     });
-  }catch(e){
+  } catch (e) {
     console.log('ERROR in /playlist: ', e)
   }
 });
@@ -1452,46 +1541,77 @@ app.post('/playlist', (req, res) => {
 
 // clear a folder
 app.post('/clear', (req, res) => {
-  try{
-  const { type, outputPath, gdriveKeyPath, gdriveFolderID } = req.body;
-  updatePaths();
-  const timestamp = new Date().toISOString();
+  try {
+    const { type, outputPath, gdriveKeyPath, gdriveFolderID } = req.body;
+    updatePaths();
+    const timestamp = new Date().toISOString();
 
-  if (type === 'gdrive-downloads') {
-    const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath, timestamp);
-    // clear gdrive downloads folder (only files that the bot uploaded)
-    drive.files.list({
-      q: `'${gdriveFolderID}' in parents and trashed = false`,
-      fields: 'files(id, name)',
-    }).then((response) => {
-      const files = response.data.files;
-      if (!files || files.length === 0) {
-        console.log('Clear Gdrive: Folder is already empty');
-        res.send({ message: 'success' });
-        return;
-      }
+    if (type === 'gdrive-downloads') {
+      const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath, timestamp);
+      // clear gdrive downloads folder (only files that the bot uploaded)
+      drive.files.list({
+        q: `'${gdriveFolderID}' in parents and trashed = false`,
+        fields: 'files(id, name)',
+      }).then((response) => {
+        const files = response.data.files;
+        if (!files || files.length === 0) {
+          console.log('Clear Gdrive: Folder is already empty');
+          res.send({ message: 'success' });
+          return;
+        }
 
-      const deleteFiles = files.map((file) =>
-        drive.files.delete({ fileId: file.id }).then(() => {
-          console.log(`Deleted file: ${file.name} (ID: ${file.id})`);
-        })
-      );
+        const deleteFiles = files.map((file) =>
+          drive.files.delete({ fileId: file.id }).then(() => {
+            console.log(`Deleted file: ${file.name} (ID: ${file.id})`);
+          })
+        );
 
-      Promise.all(deleteFiles).then(() => {
-        res.send({ message: 'success' });
+        Promise.all(deleteFiles).then(() => {
+          res.send({ message: 'success' });
+        }).catch(() => {
+          res.send({ message: 'error' });
+        });
       }).catch(() => {
         res.send({ message: 'error' });
       });
-    }).catch(() => {
-      res.send({ message: 'error' });
-    });
-  } else {
-    console.log('clear folder: unknown type --> ' + type);
-  }
-  }catch(e) {
+    } else {
+      console.log('clear folder: unknown type --> ' + type);
+    }
+  } catch (e) {
     console.log('ERROR in /clear_folder: ', e);
   }
 });
+
+
+
+
+
+app.post('/streamVideo', async (req, res) => {
+  try {
+    const { progress, status, file, timestamp, fileName, startTime, deviceID } = req.body;
+
+    broadcastProgress({ progress: 100, status: 'in-progress', file: file, timestamp: timestamp, fileName: fileName, task: 'Streaming...', deviceID: deviceID })
+    await streamVideo(downloadsPath + '/' + fileName, res);
+
+    // video is done streaming
+    let durationSecs = Math.round((Date.now() - parseInt(startTime)) / 1000);
+    const minutes = Math.trunc(durationSecs / 60).toString().padStart(2, '0');
+    const seconds = (durationSecs % 60).toString().padStart(2, '0');
+    const timeString = `${minutes}:${seconds}`
+
+    console.log(`Download time: ${timeString}`);
+
+    broadcastProgress({
+      progress: 100, status: 'completed', file: file, timestamp: timestamp,
+      fileName: fileName, task: 'streaming-completed', timeSpent: timeString, deviceID: deviceID
+    })
+  } catch (e) {
+    console.log('ERROR in streamVideo: ', e);
+  }
+});
+
+
+
 
 
 
@@ -1506,6 +1626,6 @@ app.listen(PORT, () => {
 
 // catch all endpoint to debug missing endpoints
 app.use((req, res) => {
-    console.log(`404 - Not Found: ${req.url}`);
-    res.status(404).send('Not Found');
+  console.log(`404 - Not Found: ${req.url}`);
+  res.status(404).send('Not Found');
 });

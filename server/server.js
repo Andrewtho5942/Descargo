@@ -46,8 +46,13 @@ let clients = [];
 
 // send a message to every client
 function broadcastProgress(message) {
-  clients.forEach(client => client.write(`data: ${JSON.stringify(message)}\n\n`));
+  clients.forEach(client => {
+    if (client.deviceID == message.deviceID) {
+      client.address.write(`data: ${JSON.stringify(message)}\n\n`)
+    }
+  });
 }
+
 
 app.get('/', (req, res) => {
   console.log('connection detected');
@@ -83,7 +88,7 @@ function readJsonFromFile(filePath) {
   });
 }
 
-function transcribeWithWhisper(videoPath, jsonPath, file, timestamp, fileName, totalDuration) {
+function transcribeWithWhisper(videoPath, jsonPath, file, timestamp, fileName, totalDuration, deviceID) {
   return new Promise(async (resolve, reject) => {
 
     const process = spawn('python', [
@@ -115,7 +120,10 @@ function transcribeWithWhisper(videoPath, jsonPath, file, timestamp, fileName, t
           }
           const progressPercentage = ((endTimeSecs / totalDuration) * 100).toFixed(2)
           console.log('progress: ' + progressPercentage + '%');
-          const message = { progress: progressPercentage, status: 'in-progress', file: file, timestamp: timestamp, fileName: fileName, task: 'Transcribing...' };
+          const message = {
+            progress: progressPercentage, status: 'in-progress', file: file, timestamp: timestamp,
+            fileName: fileName, task: 'Transcribing...', deviceID: deviceID
+          };
           broadcastProgress(message)
         }
       });
@@ -167,7 +175,7 @@ function applySubtitles(videoPath, srtPath, outputPath) {
 
 // Generate and save SRT content, then apply it to the video
 // confidence threshold: 5e-10: too leniant, 2e-10: minor mistakes on both, 1e-10: too strict
-function generateSubtitles(videoPath, outputPath, file, timestamp, fileName, confidenceThreshold = 2e-10, maxDuration = 8) {
+function generateSubtitles(videoPath, outputPath, file, timestamp, fileName, deviceID, confidenceThreshold = 2e-10, maxDuration = 8) {
   return new Promise(async (resolve, reject) => {
     const srtPath = videoPath.slice(0, videoPath.lastIndexOf('.')) + '.srt';
     const jsonPath = videoPath.slice(0, videoPath.lastIndexOf('.')) + '.json';
@@ -175,7 +183,7 @@ function generateSubtitles(videoPath, outputPath, file, timestamp, fileName, con
     const totalDuration = await getTotalDuration(videoPath)
     console.log('total duration (in seconds) of the file: ' + totalDuration)
 
-    transcribeWithWhisper(videoPath, jsonPath, file, timestamp, fileName, totalDuration).then((whisperResults) => {
+    transcribeWithWhisper(videoPath, jsonPath, file, timestamp, fileName, totalDuration, deviceID).then((whisperResults) => {
       // readJsonFromFile("C:\\Users\\andre\\Downloads\\Descargo\\subtitles\\test_whisper_output_old.json").then((whisperResults) => { // bypass whisper for debugging and directly use json file
 
       let srtContent = '';
@@ -353,20 +361,23 @@ async function uploadFile(filePath, fileName, drive, gdriveFolderID, playlistNam
 
 // endpoint to connect to client and send data back to it
 app.get('/progress', (req, res) => {
-  console.log('Received new progress connection');
-  
+
   // set headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
+  let curDeviceID = req.query.deviceID;
+  console.log('Received new progress connection with deviceID: ' + curDeviceID);
+
+
   // send a comment to keep the connection alive and add client
   res.write(`data: ${JSON.stringify({ message: 'connected' })}\n\n`);
-  clients.push(res);
+  clients.push({ address: res, deviceID: curDeviceID });
 
   // remove the client when the connection is closed
   req.on('close', () => {
-    clients = clients.filter(client => client !== res);
+    clients = clients.filter(client => client.deviceID !== curDeviceID);
   });
 });
 
@@ -558,7 +569,7 @@ const extractAudio = (videoFile, outputAudioFile) => {
   });
 };
 
-function processFFMPEGLine(fileName, url, lines, totalDuration, timestamp, taskMsg) {
+function processFFMPEGLine(fileName, url, lines, totalDuration, timestamp, taskMsg, deviceID) {
   for (let i = 0; i < lines.length - 1; i++) {
     const line = lines[i];
     const [key, value] = line.split('=');
@@ -570,7 +581,10 @@ function processFFMPEGLine(fileName, url, lines, totalDuration, timestamp, taskM
         if (progressPercentage && (progressPercentage >= 0)) {
           console.log(`ffmpeg progress: ${progressPercentage.toFixed(2)}%`);
 
-          const message = { progress: progressPercentage.toFixed(2), status: 'in-progress', file: url, timestamp: timestamp, fileName: fileName, task: taskMsg };
+          const message = {
+            progress: progressPercentage.toFixed(2), status: 'in-progress', file: url, timestamp: timestamp,
+            fileName: fileName, task: taskMsg, deviceID: deviceID
+          };
           broadcastProgress(message)
         }
       }
@@ -603,7 +617,7 @@ function findPermPath(desiredFileName, format, playlistFolder) {
 }
 
 async function finishUpload(generateSubs, format, gdrive, resolve, filePath, newFile, gdriveFolderID,
-  gdriveKeyPath, url, timestamp, start, playlistFolder) {
+  gdriveKeyPath, url, timestamp, start, playlistFolder, deviceID) {
 
   try {
     let permPath = findPermPath(newFile.value, format, playlistFolder);
@@ -611,13 +625,15 @@ async function finishUpload(generateSubs, format, gdrive, resolve, filePath, new
 
     //move the file from temp to downloads OR generate the subtitles and write the mp4 with subititles to the permPath
     if (generateSubs && (format === 'mp4')) {
-      broadcastProgress({ progress: 0, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Transcribing...' })
-      await generateSubtitles(filePath, permPath, url, timestamp, newFile.value);
+      broadcastProgress({ progress: 0, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Transcribing...', deviceID: deviceID })
+      await generateSubtitles(filePath, permPath, url, timestamp, newFile.value, deviceID);
       // upload the file with captions to google drive
       if (gdrive) {
         const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath);
 
         console.log('Uploading to gdrive', newFile.value);
+
+        broadcastProgress({ progress: 100, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Uploading...', deviceID: deviceID })
         await uploadFile(permPath, newFile.value, drive, gdriveFolderID, playlistFolder);
       }
     } else {
@@ -626,6 +642,7 @@ async function finishUpload(generateSubs, format, gdrive, resolve, filePath, new
         const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath);
 
         console.log('Uploading to gdrive', newFile.value);
+        broadcastProgress({ progress: 100, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Uploading...', deviceID: deviceID })
         await uploadFile(filePath, newFile.value, drive, gdriveFolderID, playlistFolder);
       }
 
@@ -641,7 +658,7 @@ async function finishUpload(generateSubs, format, gdrive, resolve, filePath, new
     const seconds = (durationSecs % 60).toString().padStart(2, '0');
     const timeString = `${minutes}:${seconds}`
     // send completion message to client and service worker
-    broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed', fileName: newFile.value, timeSpent: timeString });
+    broadcastProgress({ progress: 100, timestamp: timestamp, file: url, status: 'completed', fileName: newFile.value, timeSpent: timeString, deviceID: deviceID });
 
     console.log('DEBUG -_-_-_-_ SENT COMPLETION BROADCAST: ' + newFile.value);
     console.log(`Download time: ${timeString}`);
@@ -650,7 +667,7 @@ async function finishUpload(generateSubs, format, gdrive, resolve, filePath, new
 
   } catch (e) {
     console.log('ERR completing download: ' + e.message);
-    broadcastProgress({ progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error: e.message });
+    broadcastProgress({ progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error: e.message, deviceID: deviceID });
     delete activeProcesses[timestamp];
     resolve({ message: 'failure', file: url, timestamp: timestamp, fileName: newFile.value });
   }
@@ -668,8 +685,8 @@ function ytdlpDownload(bodyObject, playlistFolder) {
       console.log('ytdlpMain arguments:');
       console.log(bodyObjectInner);
 
-      const { url, format, gdrive, timestamp, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext,
-        normalizeAudio, compressFiles, useShazam, cookiePath, maxDownloads, generateSubs, m3u8Title, useAria2c } = bodyObjectInner;
+      const { url, format, gdrive, timestamp, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext, normalizeAudio,
+        compressFiles, useShazam, cookiePath, maxDownloads, generateSubs, m3u8Title, useAria2c, deviceID } = bodyObjectInner;
 
       max_concurrent_downloads = maxDownloads || 10;
       console.log('updated max_concurrent downloads to ' + max_concurrent_downloads)
@@ -759,7 +776,10 @@ function ytdlpDownload(bodyObject, playlistFolder) {
                   console.log('aria2c progress: ' + progressPercent)
 
                   // Broadcast progress to clients with timestamp
-                  const message = { progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Downloading...' };
+                  const message = {
+                    progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp,
+                    fileName: newFile.value, task: 'Downloading...', deviceID: deviceID
+                  };
                   broadcastProgress(message)
                 }
               } else if (line.includes('fragment not found; Skipping fragment ')) {
@@ -779,7 +799,10 @@ function ytdlpDownload(bodyObject, playlistFolder) {
                 prevData = progressPercent;
                 console.log('ytdlp progress: ' + progressPercent);
                 // Broadcast progress to clients with timestamp
-                const message = { progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Downloading...' };
+                const message = {
+                  progress: progressPercent, status: 'in-progress', file: url, timestamp: timestamp,
+                  fileName: newFile.value, task: 'Downloading...', deviceID: deviceID
+                };
                 broadcastProgress(message)
               }
             } else if (line.includes('Giving up after ')) {
@@ -801,7 +824,7 @@ function ytdlpDownload(bodyObject, playlistFolder) {
             return;
           }
 
-          const message = { progress: 0, status: 'error', file: url, timestamp: timestamp, fileName: newFile.value, error: 'error in ytdlp' };
+          const message = { progress: 0, status: 'error', file: url, timestamp: timestamp, fileName: newFile.value, error: 'error in ytdlp', deviceID: deviceID };
           broadcastProgress(message);
           clearCache(newFile.value, timestamp)
           delete activeProcesses[timestamp];
@@ -816,7 +839,7 @@ function ytdlpDownload(bodyObject, playlistFolder) {
             newFile.value = Date.parse(timestamp) + '.' + format;
           }
         } else {
-          broadcastProgress({ progress: 100, status: 'in-progress', file: url, timestamp: timestamp, fileName: 'fetching... ', task: 'Renaming...' })
+          broadcastProgress({ progress: 100, status: 'in-progress', file: url, timestamp: timestamp, fileName: 'fetching... ', task: 'Renaming...', deviceID: deviceID })
           await titlePromise;
           console.log(' ------------- cleaned title: ' + newFile.value)
         }
@@ -874,7 +897,7 @@ function ytdlpDownload(bodyObject, playlistFolder) {
             // iterate over data's lines
             const lines = progressData.split('\n');
             let taskMsg = compressFiles ? 'Compressing...' : 'Normalizing...';
-            processFFMPEGLine(newFile.value, url, lines, totalDuration, timestamp, taskMsg);
+            processFFMPEGLine(newFile.value, url, lines, totalDuration, timestamp, taskMsg, deviceID);
             progressData = lines[lines.length - 1];
           });
 
@@ -891,7 +914,7 @@ function ytdlpDownload(bodyObject, playlistFolder) {
               delete activeProcesses[timestamp];
 
               // notify clients of error
-              const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error: 'error in ffmpeg' };
+              const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error: 'error in ffmpeg', deviceID: deviceID };
               broadcastProgress(errorMessage);
               resolve(errorMessage);
               return;
@@ -913,7 +936,7 @@ function ytdlpDownload(bodyObject, playlistFolder) {
                   delete activeProcesses[timestamp];
 
                   // notify clients of error
-                  const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error: 'error renaming file' };
+                  const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error: 'error renaming file', deviceID: deviceID };
                   broadcastProgress(errorMessage);
                   resolve(errorMessage);
                   return;
@@ -922,7 +945,7 @@ function ytdlpDownload(bodyObject, playlistFolder) {
                 filePath = newShazamPath;
               }
 
-              finishUpload(generateSubs, format, gdrive, resolve, filePath, newFile, gdriveFolderID, gdriveKeyPath, url, timestamp, start, playlistFolder);
+              finishUpload(generateSubs, format, gdrive, resolve, filePath, newFile, gdriveFolderID, gdriveKeyPath, url, timestamp, start, playlistFolder, deviceID);
 
               return;
             }
@@ -932,7 +955,7 @@ function ytdlpDownload(bodyObject, playlistFolder) {
           // rename the file with shazam API from gettitlewshazam or rename it with ytdlp
           try {
             if (useShazam && shazamPromise) {
-              broadcastProgress({ progress: 100, status: 'in-progress', file: url, timestamp: timestamp, fileName: 'fetching... ', task: 'Renaming...' })
+              broadcastProgress({ progress: 100, status: 'in-progress', file: url, timestamp: timestamp, fileName: 'fetching... ', task: 'Renaming...', deviceID: deviceID })
               await shazamPromise;
               console.log('got title with shazam: ' + newFile.value);
               let newShazamPath = tempFolderPath + '\\' + newFile.value;
@@ -952,14 +975,14 @@ function ytdlpDownload(bodyObject, playlistFolder) {
             delete activeProcesses[timestamp];
 
             // notify clients of error
-            const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error: 'error renaming file' };
+            const errorMessage = { progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error: 'error renaming file', deviceID: deviceID };
             broadcastProgress(errorMessage);
             resolve(errorMessage);
             return;
           }
 
           finishUpload(generateSubs, format, gdrive, resolve, filePath, newFile, gdriveFolderID, gdriveKeyPath,
-            url, timestamp, start, playlistFolder);
+            url, timestamp, start, playlistFolder, deviceID);
 
           return;
         }
@@ -967,7 +990,7 @@ function ytdlpDownload(bodyObject, playlistFolder) {
 
       ytDlpProcess.on('error', (error) => {
         console.error(`Error executing yt-dlp: ${error.message}`);
-        broadcastProgress({ progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error: 'error executing ytdlp' });
+        broadcastProgress({ progress: 0, timestamp: timestamp, file: url, status: 'error', fileName: newFile.value, error: 'error executing ytdlp', deviceID: deviceID });
         delete activeProcesses[timestamp];
         resolve({ message: 'failure', timestamp: timestamp });
         return;
@@ -1185,8 +1208,8 @@ app.post('/playlist', (req, res) => {
   abortAllPlaylists = false;
 
 
-  const { playlistURL, format, gdrive, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext,
-    normalizeAudio, compressFiles, useShazam, cookiePath, maxDownloads, generateSubs, m3u8Title, useAria2c } = req.body;
+  const { playlistURL, format, gdrive, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext, normalizeAudio,
+    compressFiles, useShazam, cookiePath, maxDownloads, generateSubs, m3u8Title, useAria2c, deviceID } = req.body;
   console.log('received playlist request!');
 
   let command = `yt-dlp --flat-playlist -j "${playlistURL}"`
@@ -1224,7 +1247,7 @@ app.post('/playlist', (req, res) => {
       console.log('#### num downloads: ' + num_downloads + '/' + max_concurrent_downloads);
       while (num_downloads >= max_concurrent_downloads) {
         console.log('WARN: Max concurrent downloads reached, cur: ' + num_downloads + '! Polling until there is room...')
-        await delay(1000); // Check every three seconds if there is room to start the download
+        await delay(1000); // Check every second if there is room to start the download
       }
 
       if (abortAllPlaylists) {
@@ -1236,8 +1259,8 @@ app.post('/playlist', (req, res) => {
       console.log('---- playlist: downloading ' + url);
       let timestamp = new Date().toISOString();
       bodyObject = {
-        url, format, gdrive, timestamp, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext,
-        normalizeAudio, compressFiles, useShazam, cookiePath, maxDownloads, generateSubs, m3u8Title, useAria2c
+        url, format, gdrive, timestamp, outputPath, gdriveKeyPath, gdriveFolderID, removeSubtext, normalizeAudio,
+        compressFiles, useShazam, cookiePath, maxDownloads, generateSubs, m3u8Title, useAria2c, deviceID
       };
 
       const dlPromise = ytdlpDownload(bodyObject, playlistName).finally(() => { num_downloads-- });
@@ -1254,7 +1277,7 @@ app.post('/playlist', (req, res) => {
 
     await Promise.all(downloadPromises)
     console.log('All downloads are completed!')
-    const message = { status: 'playlist-completed', playlistName: playlistName };
+    const message = { status: 'playlist-completed', playlistName: playlistName, deviceID: deviceID };
     broadcastProgress(message)
     res.send({ message: 'success' })
   });

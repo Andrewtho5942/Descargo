@@ -33,7 +33,7 @@ const defaultSettings = [
   { key: "compressFiles", value: false },
   { key: "useShazam", value: false },
   { key: "generateSubs", value: false },
-  { key: "useAria2c", value: false },
+  { key: "useAria2c", value: true },
   { key: "maxDownloads", value: '10' },
 
   { key: "gdriveJSONKey", value: '' },
@@ -59,7 +59,7 @@ function App() {
 
   const [result, setResult] = useState('');
   const [serverURL, setServerURL] = useState(`http://localhost:${SERVER_PORT}`)
-  const [popupSettings, setPopupSettings] = useState([false, true, '']); // videoFormat, gdrive, link
+  const [popupSettings, setPopupSettings] = useState([false, false, '']); // videoFormat, gdrive, link
   const [m3u8Open, setM3u8Open] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [fileBg1, setFileBg1] = useTimeoutState('transparent');

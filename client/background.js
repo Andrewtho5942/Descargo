@@ -4,12 +4,24 @@ const cloudServerURL = "https://descargo-tunnel.andrewtho5942.xyz";//"https://re
 let serverURL = `http://localhost:${SERVER_PORT}`
 let eventSource = null;
 
-let iconModifier = '';
-browser.storage.local.set({ iconModifier: '' });
+let iconModifier = '_disconnected';
+browser.storage.local.set({ iconModifier: '_disconnected' });
 
 
 let disconnected = true;
 browser.storage.local.set({ disconnect: true });
+
+// generate a new deviceID if needed, storing it in deviceID
+let deviceID = -1;
+browser.storage.local.get('deviceID').then((result) => {
+    if (result.deviceID) {
+        deviceID = result.deviceID;
+    } else {
+        deviceID = Date.now();
+        browser.storage.local.set({ deviceID: deviceID });
+    }
+});
+
 
 
 
@@ -50,13 +62,16 @@ async function handleVideoDownload(result) {
     }
 }
 
-browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'DOWNLOAD_VIDEO') {
         const { payload } = message;
         console.log('payload:', payload);
 
-        axios.post(`${serverURL}/download`, payload).then(async (result) => {
+        axios.post(`${serverURL}/download`, {
+            ...payload,
+            deviceID: deviceID
+        }).then(async (result) => {
             console.log('received server download response: ', result);
             sendResponse({ message: 'loading' })
         }).catch((err) => {
@@ -70,45 +85,13 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.log('got download playlist request from popup');
 
         const { payload } = message;
-        axios.post(`${serverURL}/playlist`, payload).then(async (result) => {
+        axios.post(`${serverURL}/playlist`, {
+            ...payload,
+            deviceID: deviceID
+        }).then(async (result) => {
             console.log('playlist finished:', result);
             // const blob = result.data;
             sendResponse({ message: 'loading' });
-
-            //     if (blob.type === 'application/zip') {
-            //         const blobUrl = URL.createObjectURL(blob);
-            //         console.log('blobURL:', blobUrl);
-
-            //         // extract the filename from the response
-            //         let fileName = 'untitled.zip';
-            //         const contentDisposition = result.headers['content-disposition'];
-            //         if (contentDisposition) {
-            //             const matches = /filename="([^"]+)"/.exec(contentDisposition);
-            //             if (matches && matches[1]) {
-            //                 fileName = matches[1];
-            //             }
-            //         }
-
-            //         try {
-            //             await browser.downloads.download({
-            //                 url: blobUrl,
-            //                 filename: fileName
-            //             });
-            //             console.log('playlist downloaded successfully');
-            //             sendResponse({ message: 'success' });
-            //         } catch (error) {
-            //             console.error('Failed to start download:', error);
-            //             sendResponse({ message: 'failure' });
-            //         }
-            //     } else if (blob.type === 'application/json') {
-            //         const text = await blob.text();
-            //         const json = JSON.parse(text);
-            //         console.log('response json:', json);
-            //         sendResponse({ message: json.message });
-            //     } else {
-            //         console.log('ERR: unknown blob type:', blob.type);
-            //         sendResponse({ message: 'failure' });
-            //     }
         }).catch((err) => {
             console.error('Service worker DOWNLOAD_PLAYLIST error:', err);
             sendResponse({ message: 'failure' });
@@ -155,7 +138,8 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 // Post to /download on the server
                 axios.post(`${serverURL}/download`, {
                     ...dlArgs,
-                    url: currentLink
+                    url: currentLink,
+                    deviceID: deviceID
                 }).then(async (result) => {
                     console.log('received server response: ', result);
 
@@ -327,6 +311,12 @@ function handleEventSourceError() {
 
 function handleProgressUpdate(data) {
     let newStatus = data.status;
+    if (data.deviceID !== deviceID) {
+        console.log(`deviceID (${deviceID}) does not match given data deviceID (${data.deviceID})! Blocking update...`);
+        return;
+    } else {
+        console.log('deviceID matches, continuing...')
+    }
 
     if ((data.progress === 100) && (data.status === 'completed')) {
         console.log('DEBUG -_-_-_-_ RECEIVED COMPLETION BROADCAST: ' + data.fileName);
@@ -450,7 +440,7 @@ function createEventSource() {
     }
     console.log('opening sse connection...')
     // Start the SSE connection
-    eventSource = new EventSource(serverURL + `/progress`);
+    eventSource = new EventSource(serverURL + `/progress?deviceID=${deviceID}`);
 
     eventSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
@@ -565,7 +555,7 @@ const defaultSettings = [
     { key: "compressFiles", value: false },
     { key: "useShazam", value: false },
     { key: "generateSubs", value: false },
-    { key: "useAria2c", value: false },
+    { key: "useAria2c", value: true },
     { key: "maxDownloads", value: '10' },
 
     { key: "gdriveJSONKey", value: '' },
@@ -590,7 +580,7 @@ const addToHistory = (file, fileName, progress, timestamp, status, task) => {
     console.log('adding to history from content script...')
     chrome.storage.local.get('history', (result) => {
 
-        let newHistory = result.history;
+        let newHistory = result.history || [];
         newHistory.unshift({ file, fileName, progress, timestamp, status, task })
 
         if (newHistory.length > 25) {
