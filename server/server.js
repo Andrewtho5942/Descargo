@@ -709,9 +709,6 @@ function ytdlpDownload(bodyObject, playlistFolder) {
 
       // use aria2c to download the video concurrently 24 segments at a time
       if (useAria2c) {
-        // args.push('--external-downloader', 'aria2c', '--external-downloader-args', 
-        //   '"--console-log-level=notice --max-concurrent-downloads=8 --max-tries=10 --retry-wait=3 -k 2M --continue -l C:\\Users\\andre\\Downloads\\Descargo\\aria2c.log"',
-        //    '--retries', '10', '--fragment-retries', '10', '--verbose')
         args.push('--progress-template', '"Downloading: %(progress._percent_str)s @ %(progress.speed)s ETA %(progress.eta)s"',
           '--concurrent-fragments', '8',
           '--retries', '10',
@@ -719,13 +716,13 @@ function ytdlpDownload(bodyObject, playlistFolder) {
       }
 
       if (format === 'mp4') {
-        args.push('-f', 'bv+ba/b', '--merge-output-format', 'mp4');
+        args.push('-f', 'bv*[vcodec=avc1]+ba*[acodec=aac]/b', '--merge-output-format', 'mp4');
       } else {
-        args.push('-f', 'ba/b', '-f', 'm4a');
+        args.push('-f', 'ba*[acodec=aac]/b', '-f', 'm4a');
       }
 
       console.log('spawning yt-dlp..')
-      console.log(args)
+      console.log(args.join(' '))
 
 
       let prevData = -1;
@@ -740,7 +737,7 @@ function ytdlpDownload(bodyObject, playlistFolder) {
 
       let newFile = { value: 'fetching... ' }
       if (m3u8Title) {
-        newFile.value = m3u8Title + '.mp4';
+        newFile.value = processVideoTitle(m3u8Title, removeSubtext) + '.mp4';
       }
 
       let titlePromise = null

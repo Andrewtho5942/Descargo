@@ -78,6 +78,7 @@ function App() {
   const settingsRef = useRef(settings);
   const serverURLRef = useRef(serverURL)
 
+  
   //update the useRefs
   useEffect(() => {
     historyRef.current = history;
