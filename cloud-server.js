@@ -956,13 +956,13 @@ function ytdlpDownload(bodyObject, res, playlistName) {
         }
 
         if (format === 'mp4') {
-          args.push('-f', 'bv+ba/b', '--merge-output-format', 'mp4');
+          args.push('-f', 'bv*[vcodec=avc1]+ba*[acodec=aac]/b', '--merge-output-format', 'mp4');
         } else {
-          args.push('-f', 'ba/b', '-f', 'm4a');
+          args.push('-f', 'ba*[acodec=aac]/b', '-f', 'm4a');
         }
 
         console.log('spawning yt-dlp..')
-        console.log(args)
+        console.log(args.join(' '))
 
 
         let prevData = -1;
@@ -977,7 +977,7 @@ function ytdlpDownload(bodyObject, res, playlistName) {
 
         let newFile = { value: 'fetching... ' }
         if (m3u8Title) {
-          newFile.value = m3u8Title + '.mp4';
+          newFile.value = processVideoTitle(m3u8Title, removeSubtext) + '.mp4';
         }
 
         let titlePromise = null
