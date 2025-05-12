@@ -253,7 +253,7 @@ function deleteFileIfExists(path) {
   }
 }
 
-function createGdriveAuth(gdriveFolderID, keyPath) {
+function createGdriveAuth(keyPath) {
   const auth = new google.auth.GoogleAuth({
     credentials: require(keyPath),
     scopes: ['https://www.googleapis.com/auth/drive.file'],
@@ -552,7 +552,6 @@ const getTitlewShazam = (tempFile, url, cookiePath, newFile, removeSubtext, form
   });
 }
 
-
 const extractAudio = (videoFile, outputAudioFile) => {
   return new Promise((resolve, reject) => {
     console.log(`Extracting audio from ${videoFile}...`);
@@ -616,6 +615,7 @@ function findPermPath(desiredFileName, format, playlistFolder) {
   return permPath;
 }
 
+
 async function finishUpload(generateSubs, format, gdrive, resolve, filePath, newFile, gdriveFolderID,
   gdriveKeyPath, url, timestamp, start, playlistFolder, deviceID) {
 
@@ -629,7 +629,7 @@ async function finishUpload(generateSubs, format, gdrive, resolve, filePath, new
       await generateSubtitles(filePath, permPath, url, timestamp, newFile.value, deviceID);
       // upload the file with captions to google drive
       if (gdrive) {
-        const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath);
+        const drive = createGdriveAuth(gdriveKeyPath);
 
         console.log('Uploading to gdrive', newFile.value);
 
@@ -639,7 +639,7 @@ async function finishUpload(generateSubs, format, gdrive, resolve, filePath, new
     } else {
       // upload to google drive if necessary
       if (gdrive) {
-        const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath);
+        const drive = createGdriveAuth(gdriveKeyPath);
 
         console.log('Uploading to gdrive', newFile.value);
         broadcastProgress({ progress: 100, status: 'in-progress', file: url, timestamp: timestamp, fileName: newFile.value, task: 'Uploading...', deviceID: deviceID })
@@ -1164,7 +1164,7 @@ app.post('/clear', (req, res) => {
 
 
   } else if (type === 'gdrive-downloads') {
-    const drive = createGdriveAuth(gdriveFolderID, gdriveKeyPath);
+    const drive = createGdriveAuth(gdriveKeyPath);
     // clear gdrive downloads folder (only files that the bot uploaded)
     drive.files.list({
       q: `'${gdriveFolderID}' in parents and trashed = false`,
@@ -1269,7 +1269,7 @@ app.post('/playlist', (req, res) => {
 
     // create the google drive folder if using gdrive
     if (gdrive) {
-      ensureGdriveFolderExists(gdriveFolderID, playlistName, createGdriveAuth(gdriveFolderID, gdriveKeyPath));
+      ensureGdriveFolderExists(gdriveFolderID, playlistName, createGdriveAuth(gdriveKeyPath));
     }
 
     await Promise.all(downloadPromises)

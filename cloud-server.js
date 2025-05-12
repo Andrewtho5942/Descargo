@@ -954,11 +954,15 @@ function ytdlpDownload(bodyObject, res, playlistName) {
             '--retries', '10',
             '--fragment-retries', '10')
         }
-
-        if (format === 'mp4') {
-          args.push('-f', 'bv*[vcodec=avc1]+ba*[acodec=aac]/b', '--merge-output-format', 'mp4');
+        if(!m3u8Title) {
+         if (format === 'mp4') {
+            args.push('-f', 'bestvideo+bestaudio', '--merge-output-format', 'mp4');
+          } else {
+            args.push('-f', 'bestaudio[ext=m4a]/bestaudio');
+          }
         } else {
-          args.push('-f', 'ba*[acodec=aac]/b', '-f', 'm4a');
+          args.push('--add-header', '"Origin: https://kerolaunochan.online"',
+                    '--add-header', '"Referer: https://kerolaunochan.online/"')
         }
 
         console.log('spawning yt-dlp..')
